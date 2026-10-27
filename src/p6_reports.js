@@ -15,6 +15,13 @@ const FIT_SCRIPT = 'window.__fit=' + fitReports.toString().replace(/^function fi
 function sizeVars(){ return Object.keys(st.sizes).map(k=>`--r-${k}-size:${st.sizes[k]}px`).join(';'); }
 function reportText(key, ctx){ let t = String(st.reportText[key] ?? ''); Object.entries(ctx||{}).forEach(([k,v])=>{ t = t.split('{'+k+'}').join(v ?? ''); }); return t; }
 const rtHtml = (key, ctx) => esc(reportText(key, ctx)).replace(/\n/g,'<br>');
+// a score under the subject's limit prints as text instead of the number
+function reportScore(sj, raw){
+  const v = String(raw ?? '').trim();
+  if(v==='' || isNaN(Number(v))) return esc(v);
+  const lim = Number(sj.failBelow);
+  return (sj.failBelow!=='' && sj.failBelow!=null && !isNaN(lim) && Number(v) < lim) ? `<span class="fail">${esc(st.reportText.failText||'לא הצליח')}</span>` : esc(v);
+}
 function reportPageHtml(cls, month, s, rec, opt){
   opt = opt || {};
   ensureClassShape(cls);
@@ -29,12 +36,12 @@ function reportPageHtml(cls, month, s, rec, opt){
     for(let i=0;i<wc;i++){
       const any = weekS.some(w=> ((d.week[w.id]||[])[i]||'')!=='');
       if(!par[i] && !any) continue;
-      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>`<td>${esc((d.week[w.id]||[])[i]||'')}</td>`).join('')}</tr>`;
+      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>`<td>${reportScore(w, (d.week[w.id]||[])[i])}</td>`).join('')}</tr>`;
     }
     if(!rows) rows = `<tr><td colspan="${weekS.length+1}">—</td></tr>`;
     weekHtml = `<table class="rtab"><tr><th>${esc(st.reportText.weekHeader)}</th>${weekS.map(w=>`<th>${esc(w.label)}</th>`).join('')}</tr>${rows}</table>`;
   }
-  const catHtml = catS.length ? `<div class="catline">${rtHtml('scoreNote',ctx)}</div><table class="rtab"><tr>${catS.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr><tr>${catS.map(c=>`<td>${esc(d.cat[c.id]||'')}</td>`).join('')}</tr></table>` : '';
+  const catHtml = catS.length ? `<div class="catline">${rtHtml('scoreNote',ctx)}</div><table class="rtab"><tr>${catS.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr><tr>${catS.map(c=>`<td>${reportScore(c, d.cat[c.id])}</td>`).join('')}</tr></table>` : '';
   const L = st.layout;
   const lh = opt.letterhead ? `background-image:url('${currentLetterheadDataUrl}');` : '';
   return `<div class="report-page" style="${lh}${sizeVars()}">
@@ -189,7 +196,7 @@ function renderRepPreview(){
 }
 
 /* ---------- Report Setup (Settings) ---------- */
-const REPORT_TEXT_FIELDS = [['title','Title'],['signature','Signature'],['lead','Opening text · {month}','full'],['classLine','Class line · {class} {teacher}','full'],['note','Note','full'],['scoreNote','Score note','full'],['weekHeader','Weekly column'],['lateHeader','Late'],['absentHeader','Absent'],['earlyHeader','Left early']];
+const REPORT_TEXT_FIELDS = [['title','Title'],['signature','Signature'],['lead','Opening text · {month}','full'],['classLine','Class line · {class} {teacher}','full'],['note','Note','full'],['scoreNote','Score note','full'],['weekHeader','Weekly column'],['lateHeader','Late'],['absentHeader','Absent'],['earlyHeader','Left early'],['failText','Score below the subject limit']];
 let setupPv = {classId:'', sid:'', monthId:''};
 function renderReportSetup(box){
   const L = st.layout;

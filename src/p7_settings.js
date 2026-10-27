@@ -90,16 +90,23 @@ function renderSubjCard(){
   if(!cls){ card.innerHTML = '<h2>Subjects</h2><div class="empty">Add a class first</div>'; return; }
   card.innerHTML = `<div class="card-head"><h2>Subjects · ${esc(classLabel(cls))}</h2><span class="sp"></span>${iconBtn('undo','Default subjects','id="sjReset"')}<button class="btn sec sm" id="sjCopy">Copy to all classes</button></div>
     <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly (0–100)</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
-    <table class="t"><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
-      <td style="width:42%;"><select data-f="kind"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (0–100)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
+    <table class="t"><thead><tr><th>Subject</th><th style="text-align:center;width:1%;white-space:nowrap;" data-tip="On reports, a score below this shows as “${esc(st.reportText.failText||'לא הצליח')}”">“${esc(st.reportText.failText||'לא הצליח')}” below</th><th style="width:1%;">Type</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
+      <td style="text-align:center;"><input type="number" data-f="failBelow" min="0" max="100" step="any" value="${esc(s.failBelow ?? '')}" style="text-align:center;width:60px;"></td>
+      <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (0–100)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
       <td class="act">${iconBtn('trash','Remove','data-del','danger')}</td></tr>`).join('')}</tbody></table>`;
-  const add = ()=>{ const v = $('sjNew').value.trim(); if(!v){ $('sjNew').focus(); return; } if(cls.subjects.some(s=>s.label===v)){ toast('Already there'); return; } cls.subjects.push({id:uid(), label:v, kind:$('sjKind').value}); saveAll('Add subject', v+' · '+enName(cls)); renderSubjCard(); $('sjNew').focus(); };
+  const add = ()=>{ const v = $('sjNew').value.trim(); if(!v){ $('sjNew').focus(); return; } if(cls.subjects.some(s=>s.label===v)){ toast('Already there'); return; } cls.subjects.push({id:uid(), label:v, kind:$('sjKind').value, failBelow:FAIL_DEFAULT[$('sjKind').value]}); saveAll('Add subject', v+' · '+enName(cls)); renderSubjCard(); $('sjNew').focus(); };
   $('sjAdd').onclick = add; $('sjNew').addEventListener('keydown', e=>{ if(e.key==='Enter') add(); });
   $('sjReset').onclick = async ()=>{ if(!await askConfirm('Reset subjects for '+enName(cls)+'?', '', 'Reset', '')) return; cls.subjects = defaultSubjects(); saveAll('Reset subjects', enName(cls)); doneWithUndo('Subjects reset'); renderSubjCard(); };
   $('sjCopy').onclick = async ()=>{ if(!await askConfirm('Copy these subjects to every class?', 'Each class gets this same list.', 'Copy', '')) return; st.classes.forEach(c=>{ if(c!==cls) c.subjects = clone(cls.subjects); }); saveAll('Copy subjects to all classes', enName(cls)); doneWithUndo('Subjects copied'); };
   card.querySelectorAll('tr[data-id]').forEach(tr=>{
     const s = cls.subjects.find(x=>x.id===tr.dataset.id);
-    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{ const v = inp.value.trim(); if(!v) return; s[inp.dataset.f] = v; saveAll('Edit subject', s.label+' · '+enName(cls)); }));
+    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{
+      const f = inp.dataset.f, v = inp.value.trim();
+      if(f==='failBelow'){ s.failBelow = v==='' ? '' : Number(v); saveAll('Report limit', s.label+' · '+enName(cls)+' · '+(v||'none')); return; }
+      if(!v) return;
+      if(f==='kind' && v!==s.kind && Number(s.failBelow)===FAIL_DEFAULT[s.kind]) s.failBelow = FAIL_DEFAULT[v];
+      s[f] = v; saveAll('Edit subject', s.label+' · '+enName(cls)); if(f==='kind') renderSubjCard();
+    }));
     tr.querySelector('[data-del]').onclick = async ()=>{ if(cls.subjects.length<=1) return; if(!await askConfirm('Remove '+s.label+'?', '', 'Remove')) return; cls.subjects = cls.subjects.filter(x=>x.id!==s.id); saveAll('Remove subject', s.label+' · '+enName(cls)); doneWithUndo('Subject removed'); renderSubjCard(); };
   });
 }
@@ -394,7 +401,7 @@ function buildSampleData(){
     if(st.classes.some(c=>c.nameHe===p.heN)) return;
     const t = {id:uid(), nameEn:p.t[0], nameHe:p.t[1], isSample:true}; st.staff.push(t);
     const cls = {id:uid(), name:p.en, nameHe:p.heN, teacherId:t.id, subjects:defaultSubjects(), isSample:true};
-    if(p.extra) cls.subjects.push({id:uid(), label:p.extra.label, kind:p.extra.kind});
+    if(p.extra) cls.subjects.push({id:uid(), label:p.extra.label, kind:p.extra.kind, failBelow:FAIL_DEFAULT[p.extra.kind]});
     st.classes.push(cls); st.students[cls.id] = [];
     const used = new Set(), kids = [];
     while(kids.length < p.n){
