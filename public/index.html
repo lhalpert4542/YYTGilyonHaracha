@@ -212,6 +212,8 @@
   .report-content .signline{margin-top:20px; font-size:var(--r-sign-size); text-align:center;}
   .report-content .signline .rule{display:inline-block; width:220px; border-bottom:1px solid #333; margin-inline-start:8px;}
   .report-content .fail{font-size:.85em;}
+  .fail-set{display:flex; align-items:center; gap:6px; flex-wrap:wrap; background:var(--accent-soft); border-radius:6px; padding:8px 10px; margin-bottom:12px; font-size:13px;}
+  .fail-set input{width:62px; text-align:center; font-weight:700;}
   .copy-mark{position:absolute; top:.35in; left:.45in; font-family:var(--font-body); font-size:10px; color:#999; direction:rtl;}
 
   /* audit */
@@ -360,16 +362,14 @@ const SAMPLE_MONTH_LEGACY = 'אייר תשפ״ו (לדוגמה)';
 const AUDIT_DAYS = 7, AUDIT_PAGE = 25;
 const DEFAULT_LAYOUT = {topMM:68, bottomMM:50, leftMM:25, rightMM:25};
 
-// failBelow: on reports, a score under this prints as "לא הצליח"
-const FAIL_DEFAULT = {week:40, cat:4};
 function defaultSubjects(){
   return [
-    {id:'mishnayot', label:'משניות', kind:'week', failBelow:40},
-    {id:'chumash', label:'חומש', kind:'week', failBelow:40},
-    {id:'benAdam', label:'בן אדם לחבירו', kind:'cat', failBelow:4},
-    {id:'tefila', label:'תפילה', kind:'cat', failBelow:4},
-    {id:'hakshava', label:'הקשבה־והתמדה', kind:'cat', failBelow:4},
-    {id:'hanhaga', label:'התנהגות', kind:'cat', failBelow:4}
+    {id:'mishnayot', label:'משניות', kind:'week'},
+    {id:'chumash', label:'חומש', kind:'week'},
+    {id:'benAdam', label:'בן אדם לחבירו', kind:'cat'},
+    {id:'tefila', label:'תפילה', kind:'cat'},
+    {id:'hakshava', label:'הקשבה־והתמדה', kind:'cat'},
+    {id:'hanhaga', label:'התנהגות', kind:'cat'}
   ];
 }
 const DEFAULT_REPORT_TEXT = {
@@ -393,7 +393,8 @@ const st = {
   sizes: Object.assign({}, DEFAULT_SIZES),
   printLetterhead: true,
   reportPresets: [],
-  dashboardThresholds: {absences:3, lates:3, low:70, high:85}
+  dashboardThresholds: {absences:3, lates:3, low:70, high:85},
+  failBelow: 40   // on reports, a weekly score under this prints as "לא הצליח" ('' = off)
 };
 const assets = { letterheadDataUrl:null };
 let currentLetterheadDataUrl = DEFAULT_LETTERHEAD_DATAURL;
@@ -477,7 +478,7 @@ const classById = id => st.classes.find(c=>c.id===id);
 const staffById = id => st.staff.find(s=>s.id===id);
 const teacherOf = cls => staffById(cls && cls.teacherId);
 const studentsOf = classId => st.students[classId] || [];
-function ensureClassShape(cls){ if(!cls.subjects || !cls.subjects.length) cls.subjects = defaultSubjects(); cls.subjects.forEach(s=>{ if(s.failBelow===undefined || s.failBelow===null || s.failBelow==='') s.failBelow = FAIL_DEFAULT[s.kind]; }); return cls; }
+function ensureClassShape(cls){ if(!cls.subjects || !cls.subjects.length) cls.subjects = defaultSubjects(); return cls; }
 function migrateStudentRecord(d){
   if(d && d.cat && d.week) return d;
   const nd = {chesarim:(d&&d.chesarim)||'', ichurim:(d&&d.ichurim)||'', yatza:(d&&d.yatza)||'', cat:{}, week:{}};
@@ -551,6 +552,7 @@ function migrateLoadedState(){
   st.reportPresets = Array.isArray(st.reportPresets) ? st.reportPresets : [];
   st.printLetterhead = st.printLetterhead!==false;
   st.dashboardThresholds = Object.assign({absences:3, lates:3, low:70, high:85}, st.dashboardThresholds||{});
+  if(st.failBelow===undefined) st.failBelow = 40;
   st.months.forEach(m=>{
     if(m.year){ m.year = normYear(m.year); return; }
     m.year = monthSchoolYear(m.label) || (m.label===SAMPLE_MONTH_LEGACY ? 'תשפ"ו' : '');
@@ -577,7 +579,7 @@ function setStatus(kind){
    row "Undone" (no new row). Redo puts the change back again.
    Only your own changes are listed and can be undone.
    ===================================================================== */
-const TRACK = ['classes','staff','students','months','grades','sheets','reportStatus','sizes','layout','reportText','printLetterhead','reportPresets','dashboardThresholds','currentYear'];
+const TRACK = ['classes','staff','students','months','grades','sheets','reportStatus','sizes','layout','reportText','printLetterhead','reportPresets','dashboardThresholds','currentYear','failBelow'];
 const SUBKEYED = new Set(['students','grades','sheets','reportStatus']);
 let audit = [];
 let snap = null;
@@ -1922,12 +1924,12 @@ const FIT_SCRIPT = 'window.__fit=' + fitReports.toString().replace(/^function fi
 function sizeVars(){ return Object.keys(st.sizes).map(k=>`--r-${k}-size:${st.sizes[k]}px`).join(';'); }
 function reportText(key, ctx){ let t = String(st.reportText[key] ?? ''); Object.entries(ctx||{}).forEach(([k,v])=>{ t = t.split('{'+k+'}').join(v ?? ''); }); return t; }
 const rtHtml = (key, ctx) => esc(reportText(key, ctx)).replace(/\n/g,'<br>');
-// a score under the subject's limit prints as text instead of the number
-function reportScore(sj, raw){
+// on reports, a weekly score under the limit in Settings prints as text instead of the number
+function reportScore(raw){
   const v = String(raw ?? '').trim();
   if(v==='' || isNaN(Number(v))) return esc(v);
-  const lim = Number(sj.failBelow);
-  return (sj.failBelow!=='' && sj.failBelow!=null && !isNaN(lim) && Number(v) < lim) ? `<span class="fail">${esc(st.reportText.failText||'לא הצליח')}</span>` : esc(v);
+  const lim = st.failBelow;
+  return (lim!=='' && lim!=null && !isNaN(Number(lim)) && Number(v) < Number(lim)) ? `<span class="fail">${esc(st.reportText.failText||'לא הצליח')}</span>` : esc(v);
 }
 function reportPageHtml(cls, month, s, rec, opt){
   opt = opt || {};
@@ -1943,12 +1945,12 @@ function reportPageHtml(cls, month, s, rec, opt){
     for(let i=0;i<wc;i++){
       const any = weekS.some(w=> ((d.week[w.id]||[])[i]||'')!=='');
       if(!par[i] && !any) continue;
-      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>`<td>${reportScore(w, (d.week[w.id]||[])[i])}</td>`).join('')}</tr>`;
+      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>`<td>${reportScore((d.week[w.id]||[])[i])}</td>`).join('')}</tr>`;
     }
     if(!rows) rows = `<tr><td colspan="${weekS.length+1}">—</td></tr>`;
     weekHtml = `<table class="rtab"><tr><th>${esc(st.reportText.weekHeader)}</th>${weekS.map(w=>`<th>${esc(w.label)}</th>`).join('')}</tr>${rows}</table>`;
   }
-  const catHtml = catS.length ? `<div class="catline">${rtHtml('scoreNote',ctx)}</div><table class="rtab"><tr>${catS.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr><tr>${catS.map(c=>`<td>${reportScore(c, d.cat[c.id])}</td>`).join('')}</tr></table>` : '';
+  const catHtml = catS.length ? `<div class="catline">${rtHtml('scoreNote',ctx)}</div><table class="rtab"><tr>${catS.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr><tr>${catS.map(c=>`<td>${esc(d.cat[c.id]||'')}</td>`).join('')}</tr></table>` : '';
   const L = st.layout;
   const lh = opt.letterhead ? `background-image:url('${currentLetterheadDataUrl}');` : '';
   return `<div class="report-page" style="${lh}${sizeVars()}">
@@ -2103,7 +2105,7 @@ function renderRepPreview(){
 }
 
 /* ---------- Report Setup (Settings) ---------- */
-const REPORT_TEXT_FIELDS = [['title','Title'],['signature','Signature'],['lead','Opening text · {month}','full'],['classLine','Class line · {class} {teacher}','full'],['note','Note','full'],['scoreNote','Score note','full'],['weekHeader','Weekly column'],['lateHeader','Late'],['absentHeader','Absent'],['earlyHeader','Left early'],['failText','Score below the subject limit']];
+const REPORT_TEXT_FIELDS = [['title','Title'],['signature','Signature'],['lead','Opening text · {month}','full'],['classLine','Class line · {class} {teacher}','full'],['note','Note','full'],['scoreNote','Score note','full'],['weekHeader','Weekly column'],['lateHeader','Late'],['absentHeader','Absent'],['earlyHeader','Left early'],['failText','Weekly score below the limit']];
 let setupPv = {classId:'', sid:'', monthId:''};
 function renderReportSetup(box){
   const L = st.layout;
@@ -2250,12 +2252,13 @@ function renderSubjCard(){
   const cls = classById(csClassId);
   if(!cls){ card.innerHTML = '<h2>Subjects</h2><div class="empty">Add a class first</div>'; return; }
   card.innerHTML = `<div class="card-head"><h2>Subjects · ${esc(classLabel(cls))}</h2><span class="sp"></span>${iconBtn('undo','Default subjects','id="sjReset"')}<button class="btn sec sm" id="sjCopy">Copy to all classes</button></div>
+    <div class="fail-set">Weekly scores below <input type="number" id="failBelow" min="0" max="100" value="${esc(st.failBelow ?? '')}"> show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b> on reports <span class="muted small">· all classes</span></div>
     <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly (0–100)</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
-    <table class="t"><thead><tr><th>Subject</th><th style="text-align:center;width:1%;white-space:nowrap;" data-tip="On reports, a score below this shows as “${esc(st.reportText.failText||'לא הצליח')}”">“${esc(st.reportText.failText||'לא הצליח')}” below</th><th style="width:1%;">Type</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
-      <td style="text-align:center;"><input type="number" data-f="failBelow" min="0" max="100" step="any" value="${esc(s.failBelow ?? '')}" style="text-align:center;width:60px;"></td>
+    <table class="t"><thead><tr><th>Subject</th><th style="width:1%;">Type</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
       <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (0–100)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
       <td class="act">${iconBtn('trash','Remove','data-del','danger')}</td></tr>`).join('')}</tbody></table>`;
-  const add = ()=>{ const v = $('sjNew').value.trim(); if(!v){ $('sjNew').focus(); return; } if(cls.subjects.some(s=>s.label===v)){ toast('Already there'); return; } cls.subjects.push({id:uid(), label:v, kind:$('sjKind').value, failBelow:FAIL_DEFAULT[$('sjKind').value]}); saveAll('Add subject', v+' · '+enName(cls)); renderSubjCard(); $('sjNew').focus(); };
+  const add = ()=>{ const v = $('sjNew').value.trim(); if(!v){ $('sjNew').focus(); return; } if(cls.subjects.some(s=>s.label===v)){ toast('Already there'); return; } cls.subjects.push({id:uid(), label:v, kind:$('sjKind').value}); saveAll('Add subject', v+' · '+enName(cls)); renderSubjCard(); $('sjNew').focus(); };
+  $('failBelow').onchange = e=>{ const v = e.target.value.trim(); st.failBelow = v==='' ? '' : Math.max(0, Math.min(100, Number(v)||0)); e.target.value = st.failBelow; saveAll('Report limit', v===''?'off':String(st.failBelow)); };
   $('sjAdd').onclick = add; $('sjNew').addEventListener('keydown', e=>{ if(e.key==='Enter') add(); });
   $('sjReset').onclick = async ()=>{ if(!await askConfirm('Reset subjects for '+enName(cls)+'?', '', 'Reset', '')) return; cls.subjects = defaultSubjects(); saveAll('Reset subjects', enName(cls)); doneWithUndo('Subjects reset'); renderSubjCard(); };
   $('sjCopy').onclick = async ()=>{ if(!await askConfirm('Copy these subjects to every class?', 'Each class gets this same list.', 'Copy', '')) return; st.classes.forEach(c=>{ if(c!==cls) c.subjects = clone(cls.subjects); }); saveAll('Copy subjects to all classes', enName(cls)); doneWithUndo('Subjects copied'); };
@@ -2263,9 +2266,7 @@ function renderSubjCard(){
     const s = cls.subjects.find(x=>x.id===tr.dataset.id);
     tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{
       const f = inp.dataset.f, v = inp.value.trim();
-      if(f==='failBelow'){ s.failBelow = v==='' ? '' : Number(v); saveAll('Report limit', s.label+' · '+enName(cls)+' · '+(v||'none')); return; }
       if(!v) return;
-      if(f==='kind' && v!==s.kind && Number(s.failBelow)===FAIL_DEFAULT[s.kind]) s.failBelow = FAIL_DEFAULT[v];
       s[f] = v; saveAll('Edit subject', s.label+' · '+enName(cls)); if(f==='kind') renderSubjCard();
     }));
     tr.querySelector('[data-del]').onclick = async ()=>{ if(cls.subjects.length<=1) return; if(!await askConfirm('Remove '+s.label+'?', '', 'Remove')) return; cls.subjects = cls.subjects.filter(x=>x.id!==s.id); saveAll('Remove subject', s.label+' · '+enName(cls)); doneWithUndo('Subject removed'); renderSubjCard(); };
@@ -2562,7 +2563,7 @@ function buildSampleData(){
     if(st.classes.some(c=>c.nameHe===p.heN)) return;
     const t = {id:uid(), nameEn:p.t[0], nameHe:p.t[1], isSample:true}; st.staff.push(t);
     const cls = {id:uid(), name:p.en, nameHe:p.heN, teacherId:t.id, subjects:defaultSubjects(), isSample:true};
-    if(p.extra) cls.subjects.push({id:uid(), label:p.extra.label, kind:p.extra.kind, failBelow:FAIL_DEFAULT[p.extra.kind]});
+    if(p.extra) cls.subjects.push({id:uid(), label:p.extra.label, kind:p.extra.kind});
     st.classes.push(cls); st.students[cls.id] = [];
     const used = new Set(), kids = [];
     while(kids.length < p.n){

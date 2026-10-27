@@ -40,16 +40,14 @@ const SAMPLE_MONTH_LEGACY = 'אייר תשפ״ו (לדוגמה)';
 const AUDIT_DAYS = 7, AUDIT_PAGE = 25;
 const DEFAULT_LAYOUT = {topMM:68, bottomMM:50, leftMM:25, rightMM:25};
 
-// failBelow: on reports, a score under this prints as "לא הצליח"
-const FAIL_DEFAULT = {week:40, cat:4};
 function defaultSubjects(){
   return [
-    {id:'mishnayot', label:'משניות', kind:'week', failBelow:40},
-    {id:'chumash', label:'חומש', kind:'week', failBelow:40},
-    {id:'benAdam', label:'בן אדם לחבירו', kind:'cat', failBelow:4},
-    {id:'tefila', label:'תפילה', kind:'cat', failBelow:4},
-    {id:'hakshava', label:'הקשבה־והתמדה', kind:'cat', failBelow:4},
-    {id:'hanhaga', label:'התנהגות', kind:'cat', failBelow:4}
+    {id:'mishnayot', label:'משניות', kind:'week'},
+    {id:'chumash', label:'חומש', kind:'week'},
+    {id:'benAdam', label:'בן אדם לחבירו', kind:'cat'},
+    {id:'tefila', label:'תפילה', kind:'cat'},
+    {id:'hakshava', label:'הקשבה־והתמדה', kind:'cat'},
+    {id:'hanhaga', label:'התנהגות', kind:'cat'}
   ];
 }
 const DEFAULT_REPORT_TEXT = {
@@ -73,7 +71,8 @@ const st = {
   sizes: Object.assign({}, DEFAULT_SIZES),
   printLetterhead: true,
   reportPresets: [],
-  dashboardThresholds: {absences:3, lates:3, low:70, high:85}
+  dashboardThresholds: {absences:3, lates:3, low:70, high:85},
+  failBelow: 40   // on reports, a weekly score under this prints as "לא הצליח" ('' = off)
 };
 const assets = { letterheadDataUrl:null };
 let currentLetterheadDataUrl = DEFAULT_LETTERHEAD_DATAURL;
@@ -157,7 +156,7 @@ const classById = id => st.classes.find(c=>c.id===id);
 const staffById = id => st.staff.find(s=>s.id===id);
 const teacherOf = cls => staffById(cls && cls.teacherId);
 const studentsOf = classId => st.students[classId] || [];
-function ensureClassShape(cls){ if(!cls.subjects || !cls.subjects.length) cls.subjects = defaultSubjects(); cls.subjects.forEach(s=>{ if(s.failBelow===undefined || s.failBelow===null || s.failBelow==='') s.failBelow = FAIL_DEFAULT[s.kind]; }); return cls; }
+function ensureClassShape(cls){ if(!cls.subjects || !cls.subjects.length) cls.subjects = defaultSubjects(); return cls; }
 function migrateStudentRecord(d){
   if(d && d.cat && d.week) return d;
   const nd = {chesarim:(d&&d.chesarim)||'', ichurim:(d&&d.ichurim)||'', yatza:(d&&d.yatza)||'', cat:{}, week:{}};
@@ -231,6 +230,7 @@ function migrateLoadedState(){
   st.reportPresets = Array.isArray(st.reportPresets) ? st.reportPresets : [];
   st.printLetterhead = st.printLetterhead!==false;
   st.dashboardThresholds = Object.assign({absences:3, lates:3, low:70, high:85}, st.dashboardThresholds||{});
+  if(st.failBelow===undefined) st.failBelow = 40;
   st.months.forEach(m=>{
     if(m.year){ m.year = normYear(m.year); return; }
     m.year = monthSchoolYear(m.label) || (m.label===SAMPLE_MONTH_LEGACY ? 'תשפ"ו' : '');
@@ -257,7 +257,7 @@ function setStatus(kind){
    row "Undone" (no new row). Redo puts the change back again.
    Only your own changes are listed and can be undone.
    ===================================================================== */
-const TRACK = ['classes','staff','students','months','grades','sheets','reportStatus','sizes','layout','reportText','printLetterhead','reportPresets','dashboardThresholds','currentYear'];
+const TRACK = ['classes','staff','students','months','grades','sheets','reportStatus','sizes','layout','reportText','printLetterhead','reportPresets','dashboardThresholds','currentYear','failBelow'];
 const SUBKEYED = new Set(['students','grades','sheets','reportStatus']);
 let audit = [];
 let snap = null;
