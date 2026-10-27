@@ -2,11 +2,21 @@
 
 Monthly evaluations, scanned assessment sheets and Hebrew report cards.
 
-- `public/index.html` – the app (what Netlify serves)
-- `src/` – source pieces; run `python3 src/build.py` to rebuild `public/index.html`
-  - `p1_head.html` styles · `p2_body.html` layout · `p3_core.js` data, audit log, undo/redo
-  - `p4_views.js` dashboard, students, scores · `p5_assess.js` assessments, printing/PDF, Claude scanning
-  - `p6_reports.js` reports & report setup · `p7_settings.js` settings, audit log page, sample data, start-up
-  - `font.txt` BA Tzlotana (report font) · `logo.txt`, `lh.txt`, `fav.txt` images
+- **GitHub:** this repo. `public/index.html` is the whole app; `src/` holds its pieces (`python3 src/build.py` rebuilds it).
+- **Netlify:** builds with `node scripts/build-config.mjs` and publishes `dist/`. The build writes `config.js` from the site's environment variables, so no keys are stored in Git.
+- **Supabase:** project **YYT Gilyon Haarachah** (YYT organization, Free plan). Sign-in with Supabase Auth; data in `gilyon_state`, users in `gilyon_users`, letterhead in `gilyon_assets`, AI key in `gilyon_secrets`, audit log in `gilyon_audit`. Setup SQL: `supabase/gilyon-schema.sql`.
 
-Current version is the **test version**: no password (`TEST_MODE` in `p3_core.js`), data is saved in each browser, and the Claude API key is saved in the browser. Supabase is not connected yet.
+## Netlify environment variables
+
+| Variable | Value |
+|---|---|
+| `SUPABASE_URL` | `https://yyqvoycyvffderzngszm.supabase.co` |
+| `SUPABASE_PUBLISHABLE_KEY` | the project's publishable key |
+
+## Users
+
+Admins add people in **Settings → Users** (email, role, password). Admin = full access; View = Dashboard, Scores (read only) and Reports. Access is controlled by `gilyon_users`.
+
+## Opening the file directly
+
+If `public/index.html` is opened from a computer (no `config.js`), it runs as a test version with sample data, no password, saved only in that browser.

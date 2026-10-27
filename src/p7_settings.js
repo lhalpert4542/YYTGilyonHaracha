@@ -108,16 +108,16 @@ function renderSubjCard(){
 function renderAiTab(){
   const box = $('stBody'), key = aiKey();
   box.innerHTML = `<div class="card" style="max-width:640px;"><h2>Claude API key</h2>
-    ${key ? `<div class="notice">Key saved in this browser · ends in <b>${esc(key.slice(-4))}</b></div>` : ''}
+    ${key ? `<div class="notice">Key saved${CLOUD?'':' in this browser'} · ends in <b>${esc(key.slice(-4))}</b></div>` : ''}
     <div class="row nowrap">${pwField('aiKeyIn', key ? 'Paste a new key to replace it' : 'sk-ant-…')}<button class="btn" id="aiSave">Save</button>${key?`<button class="btn sec" id="aiRemove">Remove</button>`:''}</div>
     <div class="row" style="margin-top:14px;"><label>Model</label><select id="aiModel"><option value="claude-opus-5-5">Claude Opus 5.5 – most accurate</option><option value="claude-sonnet-5-5">Claude Sonnet 5.5 – lower cost</option></select>
       <span class="sp" style="flex:1;"></span><button class="btn sec" id="aiTest" ${key?'':'disabled'}>Test</button></div>
     <div id="aiMsg" class="small" style="margin-top:10px;"></div></div>`;
   initEyes(box);
   $('aiModel').value = aiModel();
-  $('aiModel').onchange = e=>{ try{ localStorage.setItem('gh:ai-model', e.target.value); }catch(err){} logEvent('Scan model', e.target.value); };
-  $('aiSave').onclick = ()=>{ const v = $('aiKeyIn').value.trim(); if(!v){ $('aiKeyIn').focus(); return; } try{ localStorage.setItem('gh:ai-key', v); }catch(err){} logEvent('API key saved'); toast('API key saved in this browser'); renderAiTab(); };
-  if($('aiRemove')) $('aiRemove').onclick = async ()=>{ if(!await askConfirm('Remove the API key?', 'Scanning stops working until a key is added.', 'Remove')) return; try{ localStorage.removeItem('gh:ai-key'); }catch(err){} logEvent('API key removed'); renderAiTab(); };
+  $('aiModel').onchange = e=>{ if(CLOUD){ secrets.model = e.target.value; saveSecretsCloud(); } else { try{ localStorage.setItem('gh:ai-model', e.target.value); }catch(err){} } logEvent('Scan model', e.target.value); };
+  $('aiSave').onclick = async ()=>{ const v = $('aiKeyIn').value.trim(); if(!v){ $('aiKeyIn').focus(); return; } if(CLOUD){ secrets.key = v; await saveSecretsCloud(); } else { try{ localStorage.setItem('gh:ai-key', v); }catch(err){} } logEvent('API key saved'); toast('API key saved'); renderAiTab(); };
+  if($('aiRemove')) $('aiRemove').onclick = async ()=>{ if(!await askConfirm('Remove the API key?', 'Scanning stops working until a key is added.', 'Remove')) return; if(CLOUD){ delete secrets.key; await saveSecretsCloud(); } else { try{ localStorage.removeItem('gh:ai-key'); }catch(err){} } logEvent('API key removed'); renderAiTab(); };
   $('aiTest').onclick = async ()=>{
     const msg = $('aiMsg'); msg.textContent = 'Testing…'; msg.style.color = '';
     try{ await aiCall([{type:'text', text:'Reply with the word OK.'}], 10); msg.textContent = 'The key works.'; msg.style.color = 'var(--good)'; }
@@ -126,35 +126,55 @@ function renderAiTab(){
 }
 
 /* ---------- Users ---------- */
+async function userAction(fn, okMsg){
+  try{ await fn(); if(CLOUD) await loadUsersCloud(); else saveUsers(); renderUsersTab(); if(okMsg) toast(okMsg); }
+  catch(e){ toast(e.message || String(e)); }
+}
 function renderUsersTab(){
   const box = $('stBody');
   box.innerHTML = `<div class="card"><div class="row"><input type="email" id="nuEmail" placeholder="Email" style="flex:1 1 220px;"><select id="nuRole"><option value="view">View</option><option value="admin">Admin</option></select>
-    <div style="flex:1 1 180px;">${pwField('nuPw','Password')}</div><button class="btn" id="nuAdd">Add</button></div><div id="nuMsg" class="small" style="color:var(--bad);margin-top:6px;"></div></div>
-    <div class="card"><table class="t"><thead><tr><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>${users.map(u=>{ const self = u.id===me.id; return `<tr data-uid="${esc(u.id)}">
+    <div style="flex:1 1 180px;">${pwField('nuPw','Password')}</div><button class="btn" id="nuAdd">${ICON.plus}Add</button></div><div id="nuMsg" class="small" style="color:var(--bad);margin-top:6px;"></div></div>
+    <div class="card"><table class="t"><thead><tr><th>Email</th><th>Role</th><th>Status</th>${CLOUD?'<th>Last sign-in</th>':''}<th></th></tr></thead><tbody>${users.map(u=>{ const self = u.email===me.email; return `<tr data-uid="${esc(u.id)}">
       <td><b>${esc(u.email)}</b>${self?' <span class="tag">you</span>':''}</td>
       <td><select class="role-sel" ${self?'disabled':''}><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option><option value="view" ${u.role==='view'?'selected':''}>View</option></select></td>
-      <td><span class="tag ${u.active?'ok':''}">${u.active?'Active':'Disabled'}</span></td>
-      <td class="act">${iconBtn('key','Reset password','data-act="pw"')}${self?'':(u.active?iconBtn('ban','Disable','data-act="off"','danger'):iconBtn('check','Enable','data-act="on"'))}</td></tr>`; }).join('')}</tbody></table></div>`;
+      <td><span class="tag ${u.active?'ok':''}">${u.active?'Active':'Disabled'}</span></td>${CLOUD?`<td class="small muted">${u.lastLogin?esc(fmtTime(Date.parse(u.lastLogin))):'—'}</td>`:''}
+      <td class="act">${iconBtn('key','Set password','data-act="pw"')}${self?'':(u.active?iconBtn('ban','Disable','data-act="off"','danger'):iconBtn('check','Enable','data-act="on"'))}</td></tr>`; }).join('')}</tbody></table></div>`;
   initEyes(box);
   $('nuAdd').onclick = async ()=>{
     const email = $('nuEmail').value.trim().toLowerCase(), pw = $('nuPw').value, role = $('nuRole').value, msg = $('nuMsg');
     if(!/^\S+@\S+\.\S+$/.test(email)){ msg.textContent = 'Enter a valid email.'; return; }
     if(users.some(u=>u.email===email)){ msg.textContent = 'That email already has an account.'; return; }
     if(pw.length<6){ msg.textContent = 'Password must be at least 6 characters.'; return; }
-    users.push(await makeUser(email, role, pw)); saveUsers(); logEvent('Add user', email+' · '+role); renderUsersTab(); toast('User added');
+    msg.textContent = '';
+    await userAction(async ()=>{
+      if(CLOUD) sbErr(await SB.rpc('gilyon_admin_create_user', {new_email:email, new_password:pw, new_role:role}));
+      else users.push(await makeUser(email, role, pw));
+      logEvent('Add user', email+' · '+role);
+    }, 'User added');
   };
   box.querySelectorAll('.role-sel').forEach(sel=> sel.onchange = ()=>{
     const u = users.find(x=>x.id===sel.closest('tr').dataset.uid);
-    if(u.role==='admin' && sel.value!=='admin' && activeAdmins()<=1){ sel.value = 'admin'; return; }
-    u.role = sel.value; saveUsers(); logEvent('Change role', u.email+' → '+u.role); renderUsersTab();
+    if(u.role==='admin' && sel.value!=='admin' && activeAdmins()<=1){ sel.value = 'admin'; toast('Keep at least one Admin'); return; }
+    const role = sel.value;
+    userAction(async ()=>{ if(CLOUD) sbErr(await SB.from('gilyon_users').update({role}).eq('id', u.id)); else u.role = role; logEvent('Change role', u.email+' → '+role); });
   });
   box.querySelectorAll('[data-act]').forEach(b=> b.onclick = async ()=>{
     const u = users.find(x=>x.id===b.closest('tr').dataset.uid);
-    if(b.dataset.act==='off'){ if(u.role==='admin' && activeAdmins()<=1) return; if(!await askConfirm('Disable '+u.email+'?', '', 'Disable')) return; u.active = false; saveUsers(); logEvent('Disable user', u.email); renderUsersTab(); }
-    else if(b.dataset.act==='on'){ u.active = true; saveUsers(); logEvent('Enable user', u.email); renderUsersTab(); }
-    else openModal(`<h2>Reset password</h2><p style="margin-bottom:10px;">${esc(u.email)}</p><div class="fl"><div><label>New password</label>${pwField('rp1')}</div><div><label>Confirm</label>${pwField('rp2')}</div></div><div class="msg" id="rpMsg"></div><div class="actions"><button class="btn sec" data-a="no">Cancel</button><button class="btn" data-a="yes">Save</button></div>`, mb=>{
+    const setActive = on => userAction(async ()=>{ if(CLOUD) sbErr(await SB.from('gilyon_users').update({active:on}).eq('id', u.id)); else u.active = on; logEvent(on?'Enable user':'Disable user', u.email); });
+    if(b.dataset.act==='off'){ if(u.role==='admin' && activeAdmins()<=1) return; if(!await askConfirm('Disable '+u.email+'?', 'They will not be able to sign in.', 'Disable')) return; setActive(false); }
+    else if(b.dataset.act==='on') setActive(true);
+    else openModal(`<h2>Set password</h2><p style="margin-bottom:10px;">${esc(u.email)}</p><div class="fl"><div><label>New password</label>${pwField('rp1')}</div><div><label>Confirm</label>${pwField('rp2')}</div></div><div class="msg" id="rpMsg"></div><div class="actions"><button class="btn sec" data-a="no">Cancel</button><button class="btn" data-a="yes">Save</button></div>`, mb=>{
       $('rp1').focus(); mb.querySelector('[data-a=no]').onclick = closeModal;
-      mb.querySelector('[data-a=yes]').onclick = async ()=>{ const a = $('rp1').value, c = $('rp2').value; if(a.length<6){ $('rpMsg').textContent = 'At least 6 characters.'; return; } if(a!==c){ $('rpMsg').textContent = 'Passwords do not match.'; return; } u.salt = uid()+uid(); u.hash = await hashPw(a, u.salt); saveUsers(); logEvent('Reset password', u.email); closeModal(); toast('Password changed'); };
+      mb.querySelector('[data-a=yes]').onclick = async ()=>{
+        const a = $('rp1').value, c = $('rp2').value;
+        if(a.length<6){ $('rpMsg').textContent = 'At least 6 characters.'; return; }
+        if(a!==c){ $('rpMsg').textContent = 'Passwords do not match.'; return; }
+        try{
+          if(CLOUD) sbErr(await SB.rpc('gilyon_admin_set_password', {target_email:u.email, new_password:a}));
+          else { u.salt = uid()+uid(); u.hash = await hashPw(a, u.salt); saveUsers(); }
+          logEvent('Set password', u.email); closeModal(); toast('Password changed');
+        }catch(e){ $('rpMsg').textContent = e.message; }
+      };
     });
   });
 }
@@ -223,19 +243,21 @@ function classMonthTable(c, monthId){
   const cat = c.subjects.filter(s=>s.kind==='cat'), wk = c.subjects.filter(s=>s.kind==='week');
   const headers = ['English name','שם התלמיד','חסר','איחור','יצא מוקדם', ...cat.map(s=>s.label)];
   for(let w=1; w<=wc; w++) wk.forEach(s=> headers.push(s.label+' '+w));
-  const rows = studentsOf(c.id).map(s=>{
+  const num = v => (v!=='' && v!=null && !isNaN(Number(v))) ? Number(v) : (v==null ? '' : v);
+  const rows = sortedStudents(c.id).map(s=>{
     const d = ensureRecordShape(rec && rec.perStudent[s.id] ? clone(rec.perStudent[s.id]) : emptyStudentRecord(c), c);
-    const row = {'English name':s.name||'', 'שם התלמיד':s.nameHe||'', 'חסר':d.chesarim, 'איחור':d.ichurim, 'יצא מוקדם':d.yatza};
-    cat.forEach(sj=> row[sj.label] = d.cat[sj.id]||'');
-    for(let w=1; w<=wc; w++) wk.forEach(sj=> row[sj.label+' '+w] = (d.week[sj.id]||[])[w-1]||'');
+    const row = {'English name':s.name||'', 'שם התלמיד':s.nameHe||'', 'חסר':num(d.chesarim), 'איחור':num(d.ichurim), 'יצא מוקדם':num(d.yatza)};
+    cat.forEach(sj=> row[sj.label] = num(d.cat[sj.id]));
+    for(let w=1; w<=wc; w++) wk.forEach(sj=> row[sj.label+' '+w] = num((d.week[sj.id]||[])[w-1]));
     return row;
   });
   return {headers, rows};
 }
 function exportWorkbook(file, tableFor){
-  const wb = XLSX.utils.book_new(), used = new Set();
+  const wb = XLSX.utils.book_new(), used = new Set(); let nRows = 0, nVals = 0;
   st.classes.forEach(c=>{
     const {headers, rows} = tableFor(c);
+    nRows += rows.length; rows.forEach(r=> Object.entries(r).forEach(([k,v])=>{ if(!['English name','שם התלמיד','חודש'].includes(k) && v!=='' && v!=null) nVals++; }));
     let name = sheetName(classLabel(c)), i = 2; while(used.has(name)) name = sheetName(classLabel(c)).slice(0,28)+' '+(i++); used.add(name);
     const ws = xlsSheet(headers, rows); ws['!views'] = [{RTL:true}];
     XLSX.utils.book_append_sheet(wb, ws, name);
@@ -243,7 +265,7 @@ function exportWorkbook(file, tableFor){
   if(!wb.SheetNames.length){ toast('No classes'); return; }
   wb.Workbook = {Views:[{RTL:true}]};
   XLSX.writeFile(wb, file);
-  toast('Excel downloaded');
+  toast(nRows ? `Excel downloaded · ${nRows} students${/^scores/.test(file) && !nVals ? ' · no scores entered for this month yet' : ''}` : 'Excel downloaded · no students yet');
 }
 function xlsSheet(headers, rows){ const ws = XLSX.utils.json_to_sheet(rows, {header:headers}); ws['!cols'] = headers.map(h=>({wch:Math.max(9, String(h).length+2)})); return ws; }
 function renderDataTab(){
@@ -289,7 +311,7 @@ function renderDataTab(){
     sortedMonths().forEach(m=>{ if(!monthHasScores(c.id, m.id)) return; const t = classMonthTable(c, m.id); headers = headers && headers.length>=t.headers.length+1 ? headers : ['חודש', ...t.headers]; t.rows.forEach(r=> rows.push(Object.assign({'חודש':m.label}, r))); });
     return {headers: headers || ['חודש', ...classMonthTable(c, (sortedMonths()[0]||{}).id).headers], rows};
   });
-  $('expRosterBtn').onclick = ()=> exportWorkbook('classes_and_students.xlsx', c=>({headers:['English name','שם התלמיד'], rows: studentsOf(c.id).map(s=>({'English name':s.name||'', 'שם התלמיד':s.nameHe||''}))}));
+  $('expRosterBtn').onclick = ()=> exportWorkbook('classes_and_students.xlsx', c=>({headers:['English name','שם התלמיד'], rows: sortedStudents(c.id).map(s=>({'English name':s.name||'', 'שם התלמיד':s.nameHe||''}))}));
   $('bkDown').onclick = ()=>{
     flushNow();
     const b = Object.assign(statePayload(), {version:7, exportedAt:new Date().toISOString(), letterheadDataUrl: assets.letterheadDataUrl||null});
@@ -403,13 +425,50 @@ function buildSampleData(){
 /* =====================================================================
    Start
    ===================================================================== */
+function showGate(msg, signOut){
+  $('gate').classList.remove('hidden');
+  if(msg) $('loginMsg').textContent = msg;
+  if(signOut){ const b = document.createElement('button'); b.className = 'btn sec'; b.textContent = 'Sign out'; b.style.marginTop = '8px'; b.onclick = async ()=>{ try{ await SB.auth.signOut(); }catch(e){} location.reload(); }; $('loginMsg').after(b); }
+  setTimeout(()=>$('loginEmail').focus(), 50);
+}
+async function initCloud(){
+  try{ await sbInit(); }catch(e){ showGate(e.message); return false; }
+  const ses = (await SB.auth.getSession()).data.session;
+  if(!ses){ showGate(); return false; }
+  const email = String(ses.user.email||'').toLowerCase();
+  const r = await SB.from('gilyon_users').select('*').eq('email', email).maybeSingle();
+  if(r.error || !r.data){ showGate(email+' does not have access. Ask an Admin to add you.', true); return false; }
+  if(!r.data.active){ showGate('This account is disabled. Contact an Admin.', true); return false; }
+  me = {id:r.data.id, email, role:r.data.role, active:true};
+  SB.rpc('gilyon_touch_login').then(()=>{}, ()=>{});
+  setStatus('saving'); $('saveText').textContent = 'Loading…';
+  const row = sbErr(await SB.from('gilyon_state').select('data,version').eq('id','main').maybeSingle());
+  const data = (row && row.data) || {};
+  TRACK.forEach(k=>{ if(data[k]!==undefined) st[k] = clone(data[k]); });
+  cloudVersion = Number(row && row.version || 0);
+  const oldShape = !!Object.keys(data).length && data.schemaVersion!==7;
+  if(data.letterheadDataUrl && canEdit()) assets.letterheadDataUrl = data.letterheadDataUrl;
+  await Promise.all([ canEdit() ? loadUsersCloud() : Promise.resolve(users = [me]), loadSecretsCloud(), loadAuditCloud(),
+    data.letterheadDataUrl ? Promise.resolve() : loadAssetsCloud() ]);
+  if(data.letterheadDataUrl && canEdit()) saveAssetsCloud();
+  currentLetterheadDataUrl = assets.letterheadDataUrl || DEFAULT_LETTERHEAD_DATAURL;
+  migrateLoadedState();
+  pruneAudit();
+  snap = trackState(); synced = remoteTrack(data);
+  if(canEdit()){ if(oldShape) cloudPush(true); else if(diffPatch(synced, snap).length) cloudPush(); }
+  startPoll();
+  return true;
+}
 (async function init(){
   initEyes();
   $('gateLogo').src = $('railLogo').src;
+  if(CLOUD){
+    if(!await initCloud()) return;
+  } else {
   await loadUsers();
   me = users.find(u=>u.id===localStorage.getItem(SESSION_KEY) && u.active) || null;
   if(!me && TEST_MODE){ me = users.find(u=>u.active && u.role==='admin'); localStorage.setItem(SESSION_KEY, me.id); }
-  if(!me){ $('gate').classList.remove('hidden'); setTimeout(()=>$('loginEmail').focus(), 50); return; }
+  if(!me){ showGate(); return; }
   const saved = await KV.get('state');
   if(saved) Object.keys(saved).forEach(k=>{ if(k!=='schemaVersion') st[k] = saved[k]; });
   const a = await KV.get('assets'); if(a) assets.letterheadDataUrl = a.letterheadDataUrl || null;
@@ -432,6 +491,7 @@ function buildSampleData(){
   pruneAudit();
   snap = trackState();
   if(fresh || (saved && saved.schemaVersion!==7)) await persistState();
+  }
   $('whoEmail').textContent = me.email;
   $('whoRole').textContent = me.role==='admin' ? 'Admin' : 'View';
   if(TEST_MODE) $('signOutBtn').textContent = me.role==='admin' ? 'Switch to View' : 'Switch to Admin';

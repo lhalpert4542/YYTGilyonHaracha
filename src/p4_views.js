@@ -11,7 +11,7 @@ const NAV = [
   ['settings','Settings','<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'],
   ['audit','Audit Log','<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>']
 ];
-const VIEW_TABS = ['dashboard','reports','profile'];
+const VIEW_TABS = ['dashboard','scores','reports','profile'];
 let activeTab = 'dashboard';
 function buildNav(){
   $('mainNav').innerHTML = NAV.filter(([k])=> canEdit() || VIEW_TABS.includes(k)).map(([k,l,i])=>`<button type="button" data-tab="${k}">${i}<span>${l}</span></button>`).join('');
@@ -81,26 +81,41 @@ function studentTotals(cls, sid){
     ab += n(d.chesarim); la += n(d.ichurim); ye += n(d.yatza); });
   return {ab, la, ye};
 }
+// a student's year average for one subject (monthly 1–10, weekly 0–100)
+function studentSubjectAvg(cls, sid, sj){
+  const vals = [];
+  sortedMonths().forEach(m=>{ const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return;
+    if(sj.kind==='cat'){ const v = (d.cat||{})[sj.id]; if(v!=='' && v!=null && !isNaN(Number(v))) vals.push(Number(v)); }
+    else ((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).forEach(v=>{ if(v!=='' && v!=null && !isNaN(Number(v))) vals.push(Number(v)); });
+  });
+  return avgOf(vals);
+}
 function renderDashboard(){
   const T = st.dashboardThresholds, P = $('panel-dashboard');
-  const all = [];
-  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=>{ const t = studentTotals(cls, s.id); all.push(Object.assign({cls, s, avg: studentYearAvg(cls, s.id)}, t)); }));
-  const low = all.filter(r=>r.avg!==null && r.avg < T.low).sort((a,b)=>a.avg-b.avg);
-  const high = all.filter(r=>r.avg!==null && r.avg >= T.high).sort((a,b)=>b.avg-a.avg);
+  const all = [], low = [];
+  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=>{
+    all.push(Object.assign({cls, s}, studentTotals(cls, s.id)));
+    (cls.subjects||[]).forEach(sj=>{
+      const a = studentSubjectAvg(cls, s.id, sj); if(a===null) return;
+      const pct = sj.kind==='cat' ? a*10 : a;
+      if(pct < T.low) low.push({cls, s, sj, a, pct});
+    });
+  }));
+  low.sort((x,y)=>x.pct-y.pct);
   const abs = all.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab);
   const lat = all.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
   const monthsWith = sortedMonths().filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id))).length;
   const thr = k => `<input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0" ${canEdit()?'':'disabled'}>`;
-  const list = (rows, val, klass) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}"><span class="v ${klass}">${val(r)}</span><span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
+  const fmt = r => r.sj.kind==='cat' ? (Math.round(r.a*10)/10).toString() : Math.round(r.a);
+  const list = (rows, val, klass, sub) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}"><span class="v ${klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
   P.innerHTML = pageHead('Dashboard', `<span class="tag wait he" style="font-size:13px;">${esc(st.currentYear)}</span>`) + `
     <div class="stat-grid three">
       <div class="stat"><div class="n">${all.length}</div><div class="l">Students</div></div>
       <div class="stat"><div class="n">${st.classes.length}</div><div class="l">Classes</div></div>
       <div class="stat"><div class="n">${monthsWith}</div><div class="l">Months with scores</div></div>
     </div>
-    <div class="dash-cols">
-      <div class="card ins low"><h2>Below ${thr('low')} <span class="pill">${low.length}</span></h2>${list(low, r=>Math.round(r.avg), 'bad')}</div>
-      <div class="card ins high"><h2>${thr('high')} and up <span class="pill">${high.length}</span></h2>${list(high, r=>Math.round(r.avg), 'good')}</div>
+    <div class="dash-cols three">
+      <div class="card ins low"><h2>Below ${thr('low')} by subject <span class="pill">${low.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Monthly subjects below ${T.low/10} out of 10</div>${list(low, fmt, 'bad', true)}</div>
       <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2>${list(abs, r=>r.ab, 'bad')}</div>
       <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2>${list(lat, r=>r.la, 'mid')}</div>
     </div>`;
@@ -135,7 +150,7 @@ function renderProfile(){
   const body = rows.map(r=>`<tr class="click" data-m="${r.m.id}"><td class="name">${esc(r.m.label)}</td><td class="gs">${esc(r.d.chesarim)}</td><td>${esc(r.d.ichurim)}</td><td>${esc(r.d.yatza)}</td>
     ${catS.map((x,i)=>`<td class="${i===0?'gs':''}">${esc(r.d.cat[x.id]||'')}</td>`).join('')}${weekS.map((x,i)=>{ const a = r.wAvg(x); return `<td class="${i===0?'gs':''}">${a===null?'':Math.round(a)}</td>`; }).join('')}
     <td class="gs ${tone(r.avg)}">${r.avg===null?'':Math.round(r.avg)}</td></tr>`).join('');
-  P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}Students</button><span class="sp"></span>${canEdit()?`<button class="btn sec" id="pfEdit">${ICON.edit}Edit scores</button>`:''}</div>
+  P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}${canEdit()?'Students':'Dashboard'}</button><span class="sp"></span><button class="btn sec" id="pfEdit">${canEdit()?ICON.edit+'Edit scores':'Scores'}</button></div>
     <div class="card pf-head"><div><div class="pf-name he">${esc(heName(s))}</div><div class="muted">${esc(s.name||'')}</div></div>
       <div class="pf-meta"><div><span class="muted small">Class</span><b>${esc(classLabel(cls))}</b></div><div><span class="muted small">Teacher</span><b class="he">${esc(heName(teacherOf(cls))||'—')}</b></div></div></div>
     <div class="stat-grid">
@@ -147,9 +162,9 @@ function renderProfile(){
     <div class="card"><h2>Average by month</h2>${trend}</div>
     <div class="card"><h2>Scores</h2>${rows.length ? `<div class="grid-wrap" dir="rtl"><table class="entry rtl pf-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>` : '<div class="empty">No scores yet</div>'}</div>
     <div class="card"><h2>Reports</h2>${rows.length ? `<table class="t"><tbody>${rows.map(r=>`<tr data-m="${r.m.id}"><td>${he(r.m.label)}</td><td class="act">${iconBtn('view','Preview','data-pr="view"')}${iconBtn('print','Print','data-pr="print"')}${iconBtn('download','Download PDF','data-pr="pdf"')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No reports yet</div>'}</div>`;
-  $('pfBack').onclick = ()=>{ stuFilter = cls.id; activateTab('students'); };
-  if($('pfEdit')) $('pfEdit').onclick = ()=>{ scoreClassId = cls.id; scoreMonthId = (months[months.length-1]||{}).id || ''; activateTab('scores'); };
-  P.querySelectorAll('.pf-table tr.click').forEach(tr=> tr.onclick = ()=>{ if(!canEdit()) return; scoreClassId = cls.id; scoreMonthId = tr.dataset.m; activateTab('scores'); });
+  $('pfBack').onclick = ()=>{ stuFilter = cls.id; activateTab(canEdit() ? 'students' : 'dashboard'); };
+  $('pfEdit').onclick = ()=>{ scoreClassId = cls.id; scoreMonthId = (months[months.length-1]||{}).id || ''; activateTab('scores'); };
+  P.querySelectorAll('.pf-table tr.click').forEach(tr=> tr.onclick = ()=>{ scoreClassId = cls.id; scoreMonthId = tr.dataset.m; activateTab('scores'); });
   P.querySelectorAll('[data-pr]').forEach(b=> b.onclick = ()=>{
     const m = monthById(b.closest('tr').dataset.m), item = {cls, month:m, s, rec:recFor(cls.id, m.id)};
     if(b.dataset.pr==='print') return printReports([item], lhOpt());
@@ -382,13 +397,15 @@ function renderScoresGrid(){
   if(!cls || !month){ box.innerHTML = `<div class="empty">${st.classes.length?'Pick a class and month':'Add a class first in Settings → Classes &amp; Staff'}</div>`; return; }
   const rec = getGradeRecord(cls.id, month.id), wc = rec.weekCount, defs = buildColumnDefs(cls, wc), students = sortedStudents(cls.id), gs = groupStarts(defs);
   const label = enName(cls)+' · '+month.label;
-  box.innerHTML = `<div class="grid-wrap" dir="rtl"><table class="entry rtl"><thead>${gridHead(cls, wc, rec.parshiot, true)}</thead><tbody>${
+  const ro = !canEdit();
+  box.innerHTML = `${ro?'<div class="notice">View only</div>':''}<div class="grid-wrap" dir="rtl"><table class="entry rtl ${ro?'ro':''}"><thead>${gridHead(cls, wc, rec.parshiot, !ro)}</thead><tbody>${
     students.length ? students.map((s,r)=>{
       if(!rec.perStudent[s.id]) rec.perStudent[s.id] = emptyStudentRecord(cls);
       const d = ensureRecordShape(rec.perStudent[s.id], cls);
-      return `<tr><td class="name">${esc(heName(s))}</td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}"></td>`; }).join('') + '</tr>';
+      return `<tr><td class="name">${esc(heName(s))}</td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}" ${ro?'readonly tabindex="-1"':''}></td>`; }).join('') + '</tr>';
     }).join('') : `<tr><td colspan="${defs.length+1}"><div class="empty">No students in this class</div></td></tr>`
   }</tbody></table></div>`;
+  if(ro){ box.querySelectorAll('.parsha').forEach(i=>{ i.readOnly = true; i.tabIndex = -1; }); return; }
   box.querySelectorAll('.parsha').forEach(inp=> inp.addEventListener('input', ()=>{ rec.parshiot[+inp.dataset.idx] = inp.value; saveAll('Scores', label); }));
   box.querySelectorAll('.wk-btn').forEach(b=> b.addEventListener('click', ()=>{ rec.weekCount = b.dataset.wk==='add' ? 5 : 4; saveAll(rec.weekCount===5?'Add week 5':'Remove week 5', label); renderScoresGrid(); }));
   const inputs = Array.from(box.querySelectorAll('tbody input'));

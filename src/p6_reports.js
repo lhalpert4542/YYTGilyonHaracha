@@ -76,6 +76,44 @@ function downloadReview(classes, monthId, name){
   if(docs.length) askPdf(docs, {name, title:'Making review PDF', unit:'classes', css:SHEET_CSS, landscape:true, selector:'.sheet'});
 }
 
+/* ---------- view in the app: one page at a time ---------- */
+// pages: [{label, html}], opt: {landscape, onPrint, onPdf}
+function openViewer(title, pages, opt){
+  if(!pages.length) return;
+  opt = opt || {}; let i = 0;
+  const draw = box=>{
+    const p = pages[i];
+    box.querySelector('#vwCount').textContent = (i+1)+' / '+pages.length;
+    box.querySelector('#vwSel').value = String(i);
+    const area = box.querySelector('#vwArea');
+    if(opt.landscape){
+      area.innerHTML = `<style>${SHEET_CSS}</style><div class="vw-land">${p.html}</div>`;
+      const wrap = area.querySelector('.vw-land'), sh = wrap.querySelector('.sheet'), sc = Math.min(1, (area.clientWidth-4)/1056);
+      wrap.style.cssText = `width:${1056*sc}px;height:${816*sc}px;margin:0 auto;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.15);`;
+      sh.style.transform = `scale(${sc})`; sh.style.transformOrigin = 'top left';
+    } else showPreview(area, p.html);
+  };
+  openModal(`<div class="card-head"><h2 style="margin:0;">${esc(title)}</h2><span class="sp"></span>
+      ${iconBtn('left','Previous','data-pg="-1"')}<select id="vwSel" dir="rtl" style="max-width:220px;">${pages.map((p,k)=>`<option value="${k}">${esc(p.label)}</option>`).join('')}</select><span id="vwCount" class="small muted"></span>${iconBtn('right','Next','data-pg="1"')}
+      <span style="width:10px;"></span>${opt.onPrint?`<button class="btn sec sm" data-a="print">${ICON.print}Print</button>`:''}${opt.onPdf?`<button class="btn sec sm" data-a="pdf">${ICON.download}PDF</button>`:''}<button class="btn sm" data-a="close">Close</button></div>
+    <div id="vwArea" style="background:#e9eeee;padding:10px;border-radius:8px;max-height:78vh;overflow:auto;${opt.landscape?'':'max-width:760px;margin:0 auto;'}"></div>`, box=>{
+    box.querySelectorAll('[data-pg]').forEach(b=> b.onclick = ()=>{ i = (i + Number(b.dataset.pg) + pages.length) % pages.length; draw(box); });
+    box.querySelector('#vwSel').onchange = e=>{ i = Number(e.target.value); draw(box); };
+    box.querySelector('[data-a=close]').onclick = closeModal;
+    if(opt.onPrint) box.querySelector('[data-a=print]').onclick = opt.onPrint;
+    if(opt.onPdf) box.querySelector('[data-a=pdf]').onclick = ()=>{ closeModal(); opt.onPdf(); };
+    draw(box);
+  }, true);
+}
+function viewReports(items, title, pdfName, folders){
+  openViewer(title, items.map(r=>({label: heName(r.s), html: reportPageHtml(r.cls, r.month, r.s, r.rec, lhOpt())})),
+    {onPrint: ()=>printReports(items, lhOpt()), onPdf: ()=>downloadReports(items, lhOpt(), pdfName, folders)});
+}
+function viewReview(classes, monthId, title, pdfName){
+  openViewer(title, classes.map(c=>({label: heName(c), html: reviewSheetHtml(c, monthId)})),
+    {landscape:true, onPrint: ()=>printReview(classes, monthId), onPdf: ()=>downloadReview(classes, monthId, pdfName)});
+}
+
 /* ---------- page: a box per month, like Assessments ---------- */
 let repMonthId = '', repSel = null;   // {classId, idx}
 function classItems(cls, monthId){ const m = monthById(monthId), rec = recFor(cls.id, monthId); return sortedStudents(cls.id).map(s=>({cls, month:m, s, rec})); }
@@ -95,7 +133,7 @@ function renderReports(){
     const sc = scoredClasses(m.id).length, dis = sc ? '' : 'disabled';
     const b = (act, icon, tip) => `<button type="button" class="icon-btn" data-mact="${act}" data-tip="${tip}" ${dis}>${ICON[icon]}</button>`;
     return `<div class="mcard ${m.id===repMonthId?'sel':''}" data-m="${m.id}"><div class="m">${esc(m.label)}</div><div class="s">${sc ? `${sc}/${classes.length} classes with scores` : 'No scores yet'}</div>
-      <div class="acts">${seg('Review', b('rprint','print','Print review sheets')+b('rpdf','download','Review sheets PDF'))}${seg('Reports', b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</div></div>`;
+      <div class="acts">${seg('Review', b('rview','view','View review sheets')+b('rprint','print','Print review sheets')+b('rpdf','download','Review sheets PDF'))}${seg('Reports', b('view','view','View reports')+b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</div></div>`;
   }).join('');
   const month = monthById(repMonthId);
   const table = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students with scores</th><th></th></tr></thead><tbody>${classes.map(c=>{
@@ -103,7 +141,7 @@ function renderReports(){
       const b = (act, icon, tip) => `<button type="button" class="icon-btn" data-ract="${act}" data-tip="${tip}" ${dis}>${ICON[icon]}</button>`;
       return `<tr data-cid="${esc(c.id)}" class="click ${repSel&&repSel.classId===c.id?'sel':''}"><td>${esc(enName(c))} ${c.nameHe?`<span class="muted">· ${he(c.nameHe)}</span>`:''}</td><td>${he(heName(teacherOf(c)))}</td>
         <td><span class="${filled===n?'':'muted'}">${filled}/${n}</span></td>
-        <td class="act">${iconBtn('view','Preview','data-ract="preview"')}${seg('Review', b('rprint','print','Print review sheet')+b('rpdf','download','Review sheet PDF'))}${seg('Reports', b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</td></tr>`;
+        <td class="act">${seg('Review', b('rview','view','View review sheet')+b('rprint','print','Print review sheet')+b('rpdf','download','Review sheet PDF'))}${seg('Reports', b('view','view','View reports')+b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">No classes with students</div>'}</div>` : '';
   P.innerHTML = pageHead('Reports', `<select id="repLh"><option value="with">With letterhead</option><option value="without">Without letterhead</option></select>`) +
     `<div class="month-cards wide">${cards}</div>${table}<div id="repPreviewCard"></div>`;
@@ -113,7 +151,9 @@ function renderReports(){
   P.querySelectorAll('[data-mact]').forEach(b=> b.addEventListener('click', e=>{
     e.stopPropagation();
     const m = monthById(b.closest('.mcard').dataset.m), a = b.dataset.mact, cls = scoredClasses(m.id);
-    if(a==='rprint') printReview(cls, m.id);
+    if(a==='rview') viewReview(cls, m.id, 'Review sheets '+m.label, 'Review sheets '+m.label);
+    else if(a==='view') viewReports(monthItems(m.id), 'Reports '+m.label, 'Reports '+m.label, true);
+    else if(a==='rprint') printReview(cls, m.id);
     else if(a==='rpdf') downloadReview(cls, m.id, 'Review sheets '+m.label);
     else if(a==='print') printReports(monthItems(m.id), lhOpt());
     else if(a==='pdf') downloadReports(monthItems(m.id), lhOpt(), 'Reports '+m.label, true);
@@ -122,6 +162,8 @@ function renderReports(){
     e.stopPropagation();
     const cls = classById(b.closest('tr').dataset.cid), a = b.dataset.ract;
     if(a==='preview'){ repSel = {classId: cls.id, idx:0}; renderReports(); setTimeout(()=>$('repPreviewCard').scrollIntoView({behavior:'smooth'}), 30); }
+    else if(a==='rview') viewReview([cls], month.id, 'Review '+enName(cls)+' '+month.label, 'לבדיקה '+heName(cls)+' '+month.label);
+    else if(a==='view') viewReports(classItems(cls, month.id), 'Reports '+enName(cls)+' '+month.label, 'Reports '+enName(cls)+' '+month.label);
     else if(a==='rprint') printReview([cls], month.id);
     else if(a==='rpdf') downloadReview([cls], month.id, 'לבדיקה '+heName(cls)+' '+month.label);
     else if(a==='print') printReports(classItems(cls, month.id), lhOpt());

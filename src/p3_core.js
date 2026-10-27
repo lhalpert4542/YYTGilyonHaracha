@@ -1,6 +1,8 @@
 <script>
 (function(){
 'use strict';
+const CFG = window.GILYON_CONFIG || null;
+const CLOUD = !!(CFG && CFG.supabaseUrl && CFG.supabasePublishableKey);
 /* =====================================================================
    Storage – this version saves in this browser (IndexedDB).
    Same data shape as the cloud version will use.
@@ -262,33 +264,41 @@ let flushTimer = null;
 let persistChain = Promise.resolve();
 
 function trackState(){ const o = {}; TRACK.forEach(k=> o[k] = st[k]); return clone(o); }
+// Changes are tracked by path, e.g. ['grades', 'class::month', 'perStudent', studentId],
+// so Undo and saving touch only what changed – not other people's edits next to it.
+const hasOwn = (o,k) => o!==null && typeof o==='object' && Object.prototype.hasOwnProperty.call(o,k);
+const pathOf = p => p.p || (p.sk!==undefined ? [p.k, p.sk] : [p.k]);   // older entries used k/sk
+function getAt(obj, path){ let o = obj; for(let i=0;i<path.length-1;i++){ o = o ? o[path[i]] : undefined; } const last = path[path.length-1]; return {had: hasOwn(o, last), v: hasOwn(o, last) ? o[last] : undefined}; }
+function setAt(obj, path, had, v){
+  let o = obj;
+  for(let i=0;i<path.length-1;i++){ if(!o[path[i]] || typeof o[path[i]]!=='object') o[path[i]] = {}; o = o[path[i]]; }
+  const last = path[path.length-1];
+  if(had) o[last] = clone(v); else delete o[last];
+}
 function diffPatch(before, after){
-  const patch = [];
+  const patch = [], push = (path, b) => { const g = getAt(b, path); patch.push({p:path, had:g.had, v:clone(g.v)}); };
+  const isObj = x => x && typeof x==='object' && !Array.isArray(x);
+  const deep = (path, b, a)=>{
+    if(same(b, a)) return;
+    if(isObj(b) && isObj(a)) return new Set([...Object.keys(b), ...Object.keys(a)]).forEach(f=> deep(path.concat(f), b[f], a[f]));
+    if(Array.isArray(b) && Array.isArray(a) && b.length===a.length) return b.forEach((x,i)=> deep(path.concat(String(i)), b[i], a[i]));
+    push(path, before);
+  };
   TRACK.forEach(k=>{
     const b = before[k], a = after[k];
     if(same(b,a)) return;
-    if(SUBKEYED.has(k) && b && a && typeof b==='object' && typeof a==='object'){
-      new Set([...Object.keys(b), ...Object.keys(a)]).forEach(sk=>{
-        if(!same(b[sk], a[sk])) patch.push({k, sk, had: Object.prototype.hasOwnProperty.call(b, sk), v: clone(b[sk])});
-      });
-    } else patch.push({k, had: Object.prototype.hasOwnProperty.call(before, k), v: clone(b)});
+    if(!(SUBKEYED.has(k) && b && a && typeof b==='object' && typeof a==='object')) return push([k], before);
+    new Set([...Object.keys(b), ...Object.keys(a)]).forEach(sk=>{
+      const bs = b[sk], as = a[sk];
+      if(same(bs, as)) return;
+      if(k==='grades') deep([k, sk], bs, as);   // down to a single score
+      else push([k, sk], before);
+    });
   });
   return patch;
 }
-function readPatch(patch){ // current values for the same places
-  return patch.map(p=>{
-    if(p.sk!==undefined){ const o = st[p.k]||{}; return {k:p.k, sk:p.sk, had:Object.prototype.hasOwnProperty.call(o,p.sk), v:clone(o[p.sk])}; }
-    return {k:p.k, had: st[p.k]!==undefined, v:clone(st[p.k])};
-  });
-}
-function applyPatch(patch){
-  patch.forEach(p=>{
-    if(p.sk!==undefined){
-      if(!st[p.k] || typeof st[p.k]!=='object') st[p.k] = {};
-      if(p.had) st[p.k][p.sk] = clone(p.v); else delete st[p.k][p.sk];
-    } else { if(p.had) st[p.k] = clone(p.v); else delete st[p.k]; }
-  });
-}
+function readPatch(patch){ return patch.map(p=>{ const path = pathOf(p), g = getAt(st, path); return {p:path, had:g.had, v:clone(g.v)}; }); }
+function applyPatch(patch){ patch.forEach(p=> setAt(st, pathOf(p), p.had, p.v)); }
 function pruneAudit(){ const cut = Date.now() - AUDIT_DAYS*864e5; audit = audit.filter(e=>e.ts >= cut); }
 const mine = e => me && e.user===me.email;
 function addAuditEntry(label, patch){
@@ -297,7 +307,7 @@ function addAuditEntry(label, patch){
   audit.forEach(e=>{ if(mine(e) && e.undone) e.dead = true; });
   const top = audit.find(mine);
   if(top && top.patch && !top.undone && top.action===label.action && top.detail===label.detail && now-(top.lastTs||top.ts) < 90000){
-    patch.forEach(p=>{ if(!top.patch.some(q=>q.k===p.k && q.sk===p.sk)) top.patch.push(p); });
+    patch.forEach(p=>{ if(!top.patch.some(q=>same(pathOf(q), pathOf(p)))) top.patch.push(p); });
     top.lastTs = now; return;
   }
   audit.unshift({id:uid(), ts:now, lastTs:now, user:me.email, action:label.action, detail:label.detail, patch});
@@ -327,13 +337,14 @@ function flushNow(){
 }
 function statePayload(){ const o = {schemaVersion:7}; TRACK.forEach(k=> o[k] = st[k]); return clone(o); }
 function persistState(){
+  if(CLOUD) return cloudPush();
   const payload = statePayload(), aud = clone(audit);
   persistChain = persistChain.then(async ()=>{ await KV.set('state', payload); await KV.set('audit', aud); setStatus('saved'); })
     .catch(err=>{ console.error(err); setStatus('error'); });
   return persistChain;
 }
-function persistAudit(){ const aud = clone(audit); persistChain = persistChain.then(()=>KV.set('audit', aud)).catch(()=>{}); }
-function persistAssets(){ const a = clone(assets); persistChain = persistChain.then(()=>KV.set('assets', a)).catch(()=>setStatus('error')); }
+function persistAudit(){ if(CLOUD) return flushAuditCloud(); const aud = clone(audit); persistChain = persistChain.then(()=>KV.set('audit', aud)).catch(()=>{}); }
+function persistAssets(){ if(CLOUD) return saveAssetsCloud(); const a = clone(assets); persistChain = persistChain.then(()=>KV.set('assets', a)).catch(()=>setStatus('error')); }
 
 function undoTarget(){ return audit.find(e=> mine(e) && e.patch && e.patch.length && !e.undone) || null; }
 function redoTarget(){ let t = null; audit.forEach(e=>{ if(mine(e) && e.patch && e.undone && !e.dead) t = e; }); return t; }
@@ -410,7 +421,7 @@ const pwField = (id, ph, val) => `<div class="pw-wrap"><input type="password" id
 /* =====================================================================
    Users (this browser). Real sign-in comes with the cloud version.
    ===================================================================== */
-const TEST_MODE = true;   // no password while testing
+const TEST_MODE = !CLOUD;   // the file opened on a computer: no password, saved in this browser
 let users = [], me = null;
 const SESSION_KEY = 'gilyon_eval_session';
 async function hashPw(pw, salt){
@@ -428,6 +439,12 @@ const activeAdmins = () => users.filter(u=>u.role==='admin' && u.active).length;
 async function trySignIn(){
   const email = $('loginEmail').value.trim().toLowerCase(), pw = $('loginPassword').value, msg = $('loginMsg');
   if(!email || !pw){ msg.textContent = 'Enter email and password.'; return; }
+  if(CLOUD){
+    msg.textContent = ''; $('signInBtn').disabled = true; $('signInBtn').textContent = 'Signing in…';
+    try{ await sbInit(); const r = await SB.auth.signInWithPassword({email, password:pw}); if(r.error) throw r.error; location.reload(); }
+    catch(e){ msg.textContent = /invalid/i.test(e.message) ? 'Wrong email or password.' : e.message; $('signInBtn').disabled = false; $('signInBtn').textContent = 'Sign In'; }
+    return;
+  }
   const u = users.find(x=>x.email===email);
   if(!u || u.hash !== await hashPw(pw, u.salt)){ msg.textContent = 'Wrong email or password.'; return; }
   if(!u.active){ msg.textContent = 'This account is disabled. Contact an Admin.'; return; }
@@ -435,8 +452,9 @@ async function trySignIn(){
 }
 $('signInBtn').addEventListener('click', trySignIn);
 ['loginEmail','loginPassword'].forEach(id=> $(id).addEventListener('keydown', e=>{ if(e.key==='Enter') trySignIn(); }));
-$('signOutBtn').addEventListener('click', ()=>{
+$('signOutBtn').addEventListener('click', async ()=>{
   flushNow();
+  if(CLOUD){ try{ await persistChain; }catch(e){} try{ await SB.auth.signOut(); }catch(e){} location.reload(); return; }
   if(TEST_MODE){ const other = users.find(u=>u.active && u.role!==me.role); if(other) localStorage.setItem(SESSION_KEY, other.id); }
   else localStorage.removeItem(SESSION_KEY);
   persistChain.then(()=>location.reload());

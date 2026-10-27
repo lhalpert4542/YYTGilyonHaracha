@@ -282,8 +282,8 @@ function noKeyNotice(){
 }
 
 /* ---------- Claude ---------- */
-const aiKey = () => { try{ return localStorage.getItem('gh:ai-key') || ''; }catch(e){ return ''; } };
-const aiModel = () => { try{ return localStorage.getItem('gh:ai-model') || 'claude-opus-5-5'; }catch(e){ return 'claude-opus-5-5'; } };
+const aiKey = () => { if(CLOUD) return secrets.key || ''; try{ return localStorage.getItem('gh:ai-key') || ''; }catch(e){ return ''; } };
+const aiModel = () => { if(CLOUD) return secrets.model || 'claude-opus-5-5'; try{ return localStorage.getItem('gh:ai-model') || 'claude-opus-5-5'; }catch(e){ return 'claude-opus-5-5'; } };
 async function aiCall(content, maxTokens){
   const key = aiKey(); if(!key){ const e = new Error('No API key'); e.nokey = true; throw e; }
   let res;

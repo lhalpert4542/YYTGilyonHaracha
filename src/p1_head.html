@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" href="__FAV__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
@@ -139,6 +140,7 @@
   table.entry th.wkh input{width:94%; margin-top:3px; text-align:center; font-weight:400; font-size:12px; padding:3px 2px;}
   table.entry td.name{text-align:left; background:#fafcfc; position:sticky; left:0; z-index:1; min-width:170px; padding:4px 8px;}
   table.entry td.name .he{display:block; font-size:12px; color:var(--ink-soft);}
+  table.entry.ro td input{cursor:default;} table.entry.ro td input:focus{outline:none; background:transparent;}
   table.entry .gs{border-inline-start:3px solid var(--accent-deep)!important;}
   table.entry.rtl td.name{left:auto; right:0; text-align:right; font-size:14px; font-weight:600;}
   .icon-btn.warn-ic{color:var(--mid); background:var(--mid-bg); border-color:var(--mid-line);}
@@ -248,11 +250,13 @@
   .drow:hover{background:#f6f9f9;}
   .drow .n{flex:1; font-size:14px; font-weight:600;}
   .drow .c{font-size:12px; color:var(--ink-soft);}
+  .drow .sj{font-size:12px; color:var(--accent-deep); background:var(--accent-soft); border-radius:9px; padding:1px 8px;}
+  .dash-cols.three{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr);}
   .drow .v{min-width:34px; text-align:center; font-weight:700; font-size:12px; border-radius:10px; padding:2px 6px;}
   .drow .v.bad{background:var(--bad-bg); color:var(--bad);} .drow .v.good{background:var(--good-bg); color:var(--good);} .drow .v.mid{background:var(--mid-bg); color:var(--mid);}
   .seg{display:inline-flex; align-items:center; gap:1px; border:1px solid var(--line); border-radius:6px; padding:0 2px 0 7px; margin-left:6px; background:#fff;}
   .seg small{font-size:10.5px; color:var(--ink-soft); margin-right:2px;}
-  .month-cards.wide{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));}
+  .month-cards.wide{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));}
   .pf-head{display:flex; align-items:center; gap:20px; flex-wrap:wrap;}
   .pf-head > div:first-child{flex:1;}
   .pf-name{font-size:28px; font-weight:700; color:var(--accent-deep); text-align:left;}
