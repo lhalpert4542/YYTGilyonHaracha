@@ -1,8 +1,10 @@
-# Joins the source pieces into public/index.html.  Run: python3 src/build.py
-import os
+# Joins the source pieces into ../public/index.html (or a path given as argument).
+import os, sys
 here = os.path.dirname(os.path.abspath(__file__))
 p = lambda f: open(os.path.join(here, f), encoding='utf-8').read()
-s = ''.join(p(f) for f in ['part1_head.html','part2_body.html','part3a_core.js','part3b_views.js','part3c_reports.js','part3d_settings.js'])
-s = s.replace('__FAV__', p('fav.txt').strip()).replace('__LOGO__', p('logo.txt').strip()).replace('__LH__', p('lh.txt').strip())
-open(os.path.join(here, '..', 'public', 'index.html'), 'w', encoding='utf-8').write(s)
-print('public/index.html', len(s))
+s = ''.join(p(f) for f in ['p1_head.html','p2_body.html','p3_core.js','p4_views.js','p5_assess.js','p6_reports.js','p7_settings.js'])
+for k, f in [('__FAV__','fav.txt'),('__LOGO__','logo.txt'),('__LH__','lh.txt'),('__FONT__','font.txt')]:
+    s = s.replace(k, p(f).strip())
+out = sys.argv[1] if len(sys.argv)>1 else os.path.join(here, '..', 'public', 'index.html')
+open(out, 'w', encoding='utf-8').write(s)
+print(out, len(s))

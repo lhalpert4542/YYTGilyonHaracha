@@ -1,0 +1,38 @@
+<body>
+<div id="gate" class="overlay gate hidden">
+  <div class="modal">
+    <div style="text-align:center;margin-bottom:10px;"><img id="gateLogo" alt="" style="max-width:160px;background:var(--accent-deep);border-radius:8px;padding:8px;"></div>
+    <h2>Sign in</h2>
+    <div class="fl">
+      <div><label for="loginEmail">Email</label><input type="email" id="loginEmail" autocomplete="username"></div>
+      <div><label for="loginPassword">Password</label><div class="pw-wrap"><input type="password" id="loginPassword" autocomplete="current-password"><button type="button" class="eye" tabindex="-1"></button></div></div>
+    </div>
+    <div class="actions"><button class="btn" id="signInBtn">Sign In</button></div>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+</div>
+<div id="modal" class="overlay hidden"><div class="modal" id="modalBox"></div></div>
+<div id="toast"><span id="toastText"></span><button id="toastUndo" type="button">Undo</button></div>
+
+<aside id="rail">
+  <div class="logo"><img id="railLogo" src="__LOGO__" alt="ישיבה גדילת תורה"></div>
+  <div class="app-name">גליון הערכה</div>
+  <nav id="mainNav"></nav>
+  <div class="foot">
+    <div class="who" id="whoEmail"></div>
+    <div class="role-badge" id="whoRole"></div>
+    <div class="save-status" id="saveStatus"><span class="dot"></span><span id="saveText">Saved</span></div>
+    <button type="button" id="signOutBtn">Sign Out</button>
+  </div>
+</aside>
+
+<main id="content">
+  <section class="panel" id="panel-dashboard"></section>
+  <section class="panel" id="panel-students"></section>
+  <section class="panel" id="panel-scores"></section>
+  <section class="panel" id="panel-assessments"></section>
+  <section class="panel" id="panel-reports"></section>
+  <section class="panel" id="panel-settings"></section>
+  <section class="panel" id="panel-audit"></section>
+</main>
+<input type="file" id="scanFileInput" accept="image/*,.pdf" multiple style="display:none;">
