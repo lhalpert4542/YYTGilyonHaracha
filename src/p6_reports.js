@@ -206,7 +206,7 @@ function renderReportSetup(box){
       <div class="row nowrap" style="margin-top:8px;"><input type="text" id="presetName" placeholder="Design name" style="flex:1;"><button class="btn" id="presetSave">Save</button></div></div></details>
     <details class="grp" open><summary>Letterhead &amp; Margins (mm)</summary><div class="body">
       <div class="sizes">${[['topMM','Top'],['bottomMM','Bottom'],['rightMM','Right'],['leftMM','Left']].map(([k,l])=>`<div class="field"><label>${l}</label><input type="number" min="0" max="140" data-margin="${k}" value="${L[k]}"></div>`).join('')}</div>
-      <div class="row" style="margin-top:10px;"><label class="btn sec" for="lhFile" style="cursor:pointer;">Upload letterhead</label><input type="file" id="lhFile" accept="image/*" style="display:none;"><button class="btn sec" id="lhReset">Default letterhead</button></div></div></details>
+      <div class="row" style="margin-top:10px;"><label class="btn sec" for="lhFile" style="cursor:pointer;">Upload letterhead</label><input type="file" id="lhFile" accept="image/*,.pdf" style="display:none;"><button class="btn sec" id="lhReset">Default letterhead</button></div></div></details>
     <details class="grp" open><summary>Text Sizes</summary><div class="body"><div class="sizes">${Object.keys(SIZE_LABELS).map(k=>`<div class="field"><label>${SIZE_LABELS[k]}</label><input type="number" min="8" max="60" data-size="${k}" value="${st.sizes[k]}"></div>`).join('')}</div></div></details>
     <details class="grp"><summary>Report Text</summary><div class="body"><div class="fields">${REPORT_TEXT_FIELDS.map(([k,l,full])=>`<div class="field ${full||''}"><label>${esc(l)}</label>${['lead','note'].includes(k)?`<textarea dir="rtl" data-rt="${k}">${esc(st.reportText[k]||'')}</textarea>`:`<input type="text" dir="rtl" data-rt="${k}" value="${esc(st.reportText[k]||'')}">`}</div>`).join('')}</div></div></details>
   </div><div>
@@ -228,9 +228,29 @@ function renderReportSetup(box){
   box.querySelectorAll('[data-size]').forEach(i=> i.addEventListener('input', ()=>{ st.sizes[i.dataset.size] = Math.min(60, Math.max(8, Number(i.value)||12)); saveAll('Report text sizes'); pv(); }));
   box.querySelectorAll('[data-rt]').forEach(i=> i.addEventListener('input', ()=>{ st.reportText[i.dataset.rt] = i.value; saveAll('Report text'); pv(); }));
   $('lhFile').onchange = async e=>{
-    const f = e.target.files[0]; if(!f) return;
-    assets.letterheadDataUrl = await new Promise((res, rej)=>{ const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = rej; r.readAsDataURL(f); });
-    currentLetterheadDataUrl = assets.letterheadDataUrl; persistAssets(); logEvent('Letterhead uploaded', f.name); e.target.value = ''; pv(); toast('Letterhead updated');
+    const f = e.target.files[0]; e.target.value = ''; if(!f) return;
+    let url, w = 0;
+    try{
+      if(/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name)){
+        // PDF: first page at 300 dpi (2550 × 3300 for letter size)
+        toast('Reading the PDF…');
+        await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', 'pdfjsLib');
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+        const pdf = await window.pdfjsLib.getDocument({data: new Uint8Array(await f.arrayBuffer())}).promise;
+        const page = await pdf.getPage(1), v1 = page.getViewport({scale:1}), v = page.getViewport({scale: 2550 / v1.width});
+        const c = document.createElement('canvas'); c.width = Math.round(v.width); c.height = Math.round(v.height);
+        const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+        await page.render({canvasContext:ctx, viewport:v}).promise;
+        url = c.toDataURL('image/jpeg', .9); w = c.width;
+      } else {
+        url = await new Promise((res, rej)=>{ const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+        w = await new Promise(res=>{ const i = new Image(); i.onload = ()=>res(i.naturalWidth); i.onerror = ()=>res(0); i.src = url; });
+      }
+    }catch(err){ toast('Could not read that file'); return; }
+    assets.letterheadDataUrl = url; currentLetterheadDataUrl = url;
+    persistAssets(); logEvent('Letterhead uploaded', f.name); pv();
+    if(w && w < 1700) openModal(`<h2>Low-resolution letterhead</h2><p>This image is only ${w} pixels wide, so it will print blurry. For sharp printing use a PDF of the letterhead, or an image at least 2550 × 3300 pixels.</p><div class="actions"><button class="btn" data-a="ok">OK</button></div>`, b=>{ b.querySelector('[data-a=ok]').onclick = closeModal; });
+    else toast('Letterhead updated');
   };
   $('lhReset').onclick = ()=>{ assets.letterheadDataUrl = null; currentLetterheadDataUrl = DEFAULT_LETTERHEAD_DATAURL; persistAssets(); logEvent('Letterhead reset to default'); pv(); };
   $('presetSel').onchange = e=>{
