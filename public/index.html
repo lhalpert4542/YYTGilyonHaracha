@@ -139,6 +139,7 @@
   table.entry th.wkh input{width:94%; margin-top:3px; text-align:center; font-weight:400; font-size:12px; padding:3px 2px;}
   table.entry td.name{text-align:left; background:#fafcfc; position:sticky; left:0; z-index:1; min-width:170px; padding:4px 8px;}
   table.entry td.name .he{display:block; font-size:12px; color:var(--ink-soft);}
+  table.entry .gs{border-inline-start:3px solid var(--accent-deep)!important;}
   table.entry.rtl td.name{left:auto; right:0; text-align:right; font-size:14px; font-weight:600;}
   .icon-btn.warn-ic{color:var(--mid); background:var(--mid-bg); border-color:var(--mid-line);}
   table.entry td input{width:50px; border:none; text-align:center; padding:6px 2px; font-size:13px; background:transparent; font-family:var(--font-body);}
@@ -238,6 +239,32 @@
   #toast.show{opacity:1; transform:translateX(-50%); pointer-events:auto;}
   #toast button{background:none; border:1px solid rgba(255,255,255,.4); color:#fff; border-radius:4px; padding:4px 10px; cursor:pointer; font-family:var(--font-body); font-weight:700;}
   .hide{display:none!important;}
+  .stat-grid.three{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .dash-cols{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; align-items:start;}
+  .dash-cols .card{margin:0; padding:14px;}
+  .dash-cols h2{font-size:14px;}
+  .dlist{display:flex; flex-direction:column; max-height:440px; overflow-y:auto;}
+  .drow{display:flex; align-items:center; gap:8px; width:100%; background:none; border:none; border-bottom:1px solid var(--line-soft); padding:7px 2px; cursor:pointer; font-family:var(--font-body); color:var(--ink); text-align:right;}
+  .drow:hover{background:#f6f9f9;}
+  .drow .n{flex:1; font-size:14px; font-weight:600;}
+  .drow .c{font-size:12px; color:var(--ink-soft);}
+  .drow .v{min-width:34px; text-align:center; font-weight:700; font-size:12px; border-radius:10px; padding:2px 6px;}
+  .drow .v.bad{background:var(--bad-bg); color:var(--bad);} .drow .v.good{background:var(--good-bg); color:var(--good);} .drow .v.mid{background:var(--mid-bg); color:var(--mid);}
+  .seg{display:inline-flex; align-items:center; gap:1px; border:1px solid var(--line); border-radius:6px; padding:0 2px 0 7px; margin-left:6px; background:#fff;}
+  .seg small{font-size:10.5px; color:var(--ink-soft); margin-right:2px;}
+  .month-cards.wide{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));}
+  .pf-head{display:flex; align-items:center; gap:20px; flex-wrap:wrap;}
+  .pf-head > div:first-child{flex:1;}
+  .pf-name{font-size:28px; font-weight:700; color:var(--accent-deep); text-align:left;}
+  .pf-meta{display:flex; gap:24px;} .pf-meta div{display:flex; flex-direction:column;}
+  .t-bad{color:var(--bad)!important;} .t-good{color:var(--good)!important;}
+  .trend{display:flex; gap:14px; align-items:flex-end; height:170px; padding-top:6px; direction:rtl;}
+  .trend .tb{display:flex; flex-direction:column; align-items:center; gap:4px; width:60px;}
+  .trend .bar-wrap{height:110px; width:34px; display:flex; align-items:flex-end; background:#f1f5f5; border-radius:5px;}
+  .trend .bar{width:100%; background:var(--accent); border-radius:5px;} .trend .bar.b{background:var(--bad);} .trend .bar.g{background:var(--good);}
+  .trend b{font-size:13px;} .trend span{font-size:12px; color:var(--ink-soft);}
+  table.pf-table{width:100%;} table.pf-table td{padding:7px 8px; font-size:13px;} table.pf-table tr.click{cursor:pointer;} table.pf-table tr.click:hover td{background:#f6f9f9;}
+  @media (max-width:1200px){ .dash-cols{grid-template-columns:repeat(2,minmax(0,1fr));} }
   .cs-grid{display:grid; grid-template-columns:minmax(0,1.7fr) minmax(0,1fr); gap:16px; align-items:start;}
   @media (max-width:1100px){ .cs-grid{grid-template-columns:1fr;} }
   a{color:var(--accent);}
@@ -276,6 +303,7 @@
 
 <main id="content">
   <section class="panel" id="panel-dashboard"></section>
+  <section class="panel" id="panel-profile"></section>
   <section class="panel" id="panel-students"></section>
   <section class="panel" id="panel-scores"></section>
   <section class="panel" id="panel-assessments"></section>
@@ -729,6 +757,16 @@ $('signOutBtn').addEventListener('click', ()=>{
 });
 window.addEventListener('beforeunload', ()=>{ if(flushTimer) flushNow(); });
 
+/* ---------- students sorted by last name (Hebrew name, else English) ---------- */
+function lastKey(s){
+  const split = t => String(t||'').trim().split(/\s+/).filter(Boolean);
+  const h = split(s.nameHe), e = split(s.name);
+  if(h.length) return (h.length>1 ? h[h.length-1]+' '+h.slice(0,-1).join(' ') : h[0]);
+  return e.length>1 ? e[e.length-1]+' '+e.slice(0,-1).join(' ') : (e[0]||'');
+}
+const byLast = (a,b) => lastKey(a).localeCompare(lastKey(b), 'he');
+function sortedStudents(classId){ return studentsOf(classId).slice().sort(byLast); }
+
 /* =====================================================================
    Navigation
    ===================================================================== */
@@ -741,7 +779,7 @@ const NAV = [
   ['settings','Settings','<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'],
   ['audit','Audit Log','<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>']
 ];
-const VIEW_TABS = ['dashboard','reports'];
+const VIEW_TABS = ['dashboard','reports','profile'];
 let activeTab = 'dashboard';
 function buildNav(){
   $('mainNav').innerHTML = NAV.filter(([k])=> canEdit() || VIEW_TABS.includes(k)).map(([k,l,i])=>`<button type="button" data-tab="${k}">${i}<span>${l}</span></button>`).join('');
@@ -751,13 +789,13 @@ function activateTab(tab){
   if(!canEdit() && !VIEW_TABS.includes(tab)) tab = 'dashboard';
   flushNow();
   activeTab = tab;
-  document.querySelectorAll('#mainNav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('#mainNav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab || (tab==='profile' && b.dataset.tab===(canEdit()?'students':'dashboard'))));
   document.querySelectorAll('section.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+tab));
   renderActive();
   window.scrollTo(0,0);
 }
 function renderActive(){
-  ({dashboard:renderDashboard, students:renderStudents, scores:renderScores, assessments:renderAssessments, reports:renderReports, settings:renderSettings, audit:renderAudit}[activeTab] || (()=>{}))();
+  ({dashboard:renderDashboard, profile:renderProfile, students:renderStudents, scores:renderScores, assessments:renderAssessments, reports:renderReports, settings:renderSettings, audit:renderAudit}[activeTab] || (()=>{}))();
 }
 const pageHead = (title, extra='') => `<div class="page-head"><h1>${esc(title)}</h1><span class="sp"></span>${extra}</div>`;
 const classLabel = c => enName(c) + (c.nameHe && c.nameHe!==enName(c) ? ' · '+c.nameHe : '');
@@ -802,58 +840,95 @@ function hasAnyScore(d){
 const monthHasScores = (classId, monthId) => { const r = recFor(classId, monthId); return !!r && Object.values(r.perStudent).some(hasAnyScore); };
 
 /* =====================================================================
-   Dashboard (Hebrew names)
+   Dashboard – compact lists with Hebrew names; click a student to open them
    ===================================================================== */
+function studentTotals(cls, sid){
+  let ab = 0, la = 0, ye = 0;
+  sortedMonths().forEach(m=>{ const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return;
+    const n = v => (v!=='' && v!=null && !isNaN(Number(v))) ? Number(v) : 0;
+    ab += n(d.chesarim); la += n(d.ichurim); ye += n(d.yatza); });
+  return {ab, la, ye};
+}
 function renderDashboard(){
   const T = st.dashboardThresholds, P = $('panel-dashboard');
-  let nStudents = 0; const allAvgs = [], low = [];
-  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=>{
-    nStudents++;
-    const a = studentYearAvg(cls, s.id);
-    if(a!==null){ allAvgs.push(a); if(a < T.low) low.push({cls, s, avg:a}); }
-  }));
-  low.sort((a,b)=>a.avg-b.avg);
-  const lowS = [], highS = [];
-  unionSubjects().forEach(subj=> st.classes.forEach(cls=>{
-    const a = classSubjectYearAvg(cls, subj); if(a===null) return;
-    const r = {subject:subj.label, cls, avg:a};
-    if(a < T.low) lowS.push(r); if(a >= T.high) highS.push(r);
-  }));
-  lowS.sort((a,b)=>a.avg-b.avg); highS.sort((a,b)=>b.avg-a.avg);
-  const totals = [];
-  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=>{
-    let ab = 0, la = 0;
-    sortedMonths().forEach(m=>{ const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[s.id]; if(!d) return;
-      if(d.chesarim!=='' && !isNaN(Number(d.chesarim))) ab += Number(d.chesarim);
-      if(d.ichurim!=='' && !isNaN(Number(d.ichurim))) la += Number(d.ichurim); });
-    totals.push({cls, s, ab, la});
-  }));
-  const abs = totals.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab);
-  const lat = totals.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
+  const all = [];
+  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=>{ const t = studentTotals(cls, s.id); all.push(Object.assign({cls, s, avg: studentYearAvg(cls, s.id)}, t)); }));
+  const low = all.filter(r=>r.avg!==null && r.avg < T.low).sort((a,b)=>a.avg-b.avg);
+  const high = all.filter(r=>r.avg!==null && r.avg >= T.high).sort((a,b)=>b.avg-a.avg);
+  const abs = all.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab);
+  const lat = all.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
   const monthsWith = sortedMonths().filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id))).length;
-  const ya = avgOf(allAvgs);
   const thr = k => `<input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0" ${canEdit()?'':'disabled'}>`;
-  const stuTable = (rows, val, klass) => rows.length ? `<table class="t"><thead><tr><th>Student</th><th>Class</th><th style="width:1%;">${val==='avg'?'Average':'Total'}</th></tr></thead><tbody>${rows.map(r=>`<tr class="click" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}"><td>${he(heName(r.s))}</td><td>${he(heName(r.cls))}</td><td class="${klass}" style="text-align:center;">${val==='avg'?Math.round(r.avg):r[val]}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">None</div>';
-  const subTable = (rows, klass) => rows.length ? `<table class="t"><thead><tr><th>Subject</th><th>Class</th><th style="width:1%;">Average</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${he(r.subject)}</td><td>${he(heName(r.cls))}</td><td class="${klass}" style="text-align:center;">${Math.round(r.avg)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">None</div>';
+  const list = (rows, val, klass) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}"><span class="v ${klass}">${val(r)}</span><span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
   P.innerHTML = pageHead('Dashboard', `<span class="tag wait he" style="font-size:13px;">${esc(st.currentYear)}</span>`) + `
-    <div class="stat-grid">
-      <div class="stat"><div class="n">${nStudents}</div><div class="l">Students</div></div>
+    <div class="stat-grid three">
+      <div class="stat"><div class="n">${all.length}</div><div class="l">Students</div></div>
       <div class="stat"><div class="n">${st.classes.length}</div><div class="l">Classes</div></div>
-      <div class="stat"><div class="n">${ya===null?'—':Math.round(ya)}</div><div class="l">Year average</div></div>
       <div class="stat"><div class="n">${monthsWith}</div><div class="l">Months with scores</div></div>
     </div>
-    <div class="dash-grid">
-      <div class="card ins low wide"><h2>Students averaging below ${thr('low')} <span class="pill">${low.length}</span></h2><div class="scroll-x">${stuTable(low,'avg','bad-cell')}</div></div>
-      <div class="card ins low"><h2>Class subjects below ${thr('low')} <span class="pill">${lowS.length}</span></h2><div class="scroll-x">${subTable(lowS,'bad-cell')}</div></div>
-      <div class="card ins high"><h2>Class subjects at ${thr('high')} or above <span class="pill">${highS.length}</span></h2><div class="scroll-x">${subTable(highS,'good-cell')}</div></div>
-      <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2><div class="scroll-x">${stuTable(abs,'ab','bad-cell')}</div></div>
-      <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2><div class="scroll-x">${stuTable(lat,'la','mid-cell')}</div></div>
+    <div class="dash-cols">
+      <div class="card ins low"><h2>Below ${thr('low')} <span class="pill">${low.length}</span></h2>${list(low, r=>Math.round(r.avg), 'bad')}</div>
+      <div class="card ins high"><h2>${thr('high')} and up <span class="pill">${high.length}</span></h2>${list(high, r=>Math.round(r.avg), 'good')}</div>
+      <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2>${list(abs, r=>r.ab, 'bad')}</div>
+      <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2>${list(lat, r=>r.la, 'mid')}</div>
     </div>`;
   P.querySelectorAll('.thr').forEach(inp=> inp.addEventListener('change', ()=>{
     st.dashboardThresholds[inp.dataset.thr] = Math.max(0, Math.floor(Number(inp.value)||0));
     saveAll('Dashboard limits'); renderDashboard();
   }));
-  P.querySelectorAll('tr.click').forEach(tr=> tr.addEventListener('click', ()=> openStudentReport(tr.dataset.cls, tr.dataset.sid)));
+  P.querySelectorAll('.drow').forEach(b=> b.addEventListener('click', ()=> openProfile(b.dataset.cls, b.dataset.sid)));
+}
+
+/* =====================================================================
+   Student profile – scores by month and reports (like Kriah)
+   ===================================================================== */
+let profile = null;   // {classId, sid}
+function openProfile(classId, sid){ profile = {classId, sid}; activateTab('profile'); }
+const openStudentReport = openProfile;
+function renderProfile(){
+  const P = $('panel-profile'), cls = profile && classById(profile.classId), s = cls && studentsOf(cls.id).find(x=>x.id===profile.sid);
+  if(!s){ P.innerHTML = '<div class="empty">Student not found</div>'; return; }
+  const months = sortedMonths().filter(m=>{ const r = recFor(cls.id, m.id); return r && hasAnyScore(r.perStudent[s.id]); });
+  const catS = cls.subjects.filter(x=>x.kind==='cat'), weekS = cls.subjects.filter(x=>x.kind==='week');
+  const t = studentTotals(cls, s.id), ya = studentYearAvg(cls, s.id);
+  const rows = months.map(m=>{
+    const rec = recFor(cls.id, m.id), d = ensureRecordShape(clone(rec.perStudent[s.id]), cls);
+    const wAvg = sj => avgOf((d.week[sj.id]||[]).slice(0, rec.weekCount));
+    return {m, rec, d, avg: studentOverallAvg(d, cls, rec.weekCount), wAvg};
+  });
+  const T = st.dashboardThresholds, tone = v => v===null ? '' : v < T.low ? 'bad-cell' : v >= T.high ? 'good-cell' : '';
+  const trend = rows.length ? `<div class="trend">${rows.map(r=>{ const v = r.avg===null ? 0 : Math.round(r.avg); return `<div class="tb"><div class="bar-wrap"><div class="bar ${v<T.low?'b':v>=T.high?'g':''}" style="height:${Math.max(4,v)}%"></div></div><b>${r.avg===null?'—':v}</b><span class="he">${esc(monthName(r.m.label))}</span></div>`; }).join('')}</div>` : '<div class="empty">No scores yet</div>';
+  const head = `<tr class="grp"><th rowspan="2">חודש</th><th colspan="3" class="gs">נוכחות</th>${catS.length?`<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`:''}${weekS.length?`<th colspan="${weekS.length}" class="gs">ממוצע שבועי</th>`:''}<th rowspan="2" class="gs">ממוצע</th></tr>
+    <tr><th class="gs">חסר</th><th>איחור</th><th>יצא מוקדם</th>${catS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}${weekS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}</tr>`;
+  const body = rows.map(r=>`<tr class="click" data-m="${r.m.id}"><td class="name">${esc(r.m.label)}</td><td class="gs">${esc(r.d.chesarim)}</td><td>${esc(r.d.ichurim)}</td><td>${esc(r.d.yatza)}</td>
+    ${catS.map((x,i)=>`<td class="${i===0?'gs':''}">${esc(r.d.cat[x.id]||'')}</td>`).join('')}${weekS.map((x,i)=>{ const a = r.wAvg(x); return `<td class="${i===0?'gs':''}">${a===null?'':Math.round(a)}</td>`; }).join('')}
+    <td class="gs ${tone(r.avg)}">${r.avg===null?'':Math.round(r.avg)}</td></tr>`).join('');
+  P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}Students</button><span class="sp"></span>${canEdit()?`<button class="btn sec" id="pfEdit">${ICON.edit}Edit scores</button>`:''}</div>
+    <div class="card pf-head"><div><div class="pf-name he">${esc(heName(s))}</div><div class="muted">${esc(s.name||'')}</div></div>
+      <div class="pf-meta"><div><span class="muted small">Class</span><b>${esc(classLabel(cls))}</b></div><div><span class="muted small">Teacher</span><b class="he">${esc(heName(teacherOf(cls))||'—')}</b></div></div></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="n ${ya===null?'':ya<T.low?'t-bad':ya>=T.high?'t-good':''}">${ya===null?'—':Math.round(ya)}</div><div class="l">Average</div></div>
+      <div class="stat"><div class="n">${t.ab}</div><div class="l">Absences</div></div>
+      <div class="stat"><div class="n">${t.la}</div><div class="l">Lates</div></div>
+      <div class="stat"><div class="n">${t.ye}</div><div class="l">Left early</div></div>
+    </div>
+    <div class="card"><h2>Average by month</h2>${trend}</div>
+    <div class="card"><h2>Scores</h2>${rows.length ? `<div class="grid-wrap" dir="rtl"><table class="entry rtl pf-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>` : '<div class="empty">No scores yet</div>'}</div>
+    <div class="card"><h2>Reports</h2>${rows.length ? `<table class="t"><tbody>${rows.map(r=>`<tr data-m="${r.m.id}"><td>${he(r.m.label)}</td><td class="act">${iconBtn('view','Preview','data-pr="view"')}${iconBtn('print','Print','data-pr="print"')}${iconBtn('download','Download PDF','data-pr="pdf"')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No reports yet</div>'}</div>`;
+  $('pfBack').onclick = ()=>{ stuFilter = cls.id; activateTab('students'); };
+  if($('pfEdit')) $('pfEdit').onclick = ()=>{ scoreClassId = cls.id; scoreMonthId = (months[months.length-1]||{}).id || ''; activateTab('scores'); };
+  P.querySelectorAll('.pf-table tr.click').forEach(tr=> tr.onclick = ()=>{ if(!canEdit()) return; scoreClassId = cls.id; scoreMonthId = tr.dataset.m; activateTab('scores'); });
+  P.querySelectorAll('[data-pr]').forEach(b=> b.onclick = ()=>{
+    const m = monthById(b.closest('tr').dataset.m), item = {cls, month:m, s, rec:recFor(cls.id, m.id)};
+    if(b.dataset.pr==='print') return printReports([item], lhOpt());
+    if(b.dataset.pr==='pdf') return downloadReports([item], lhOpt(), lastKey(s)+' '+m.label);
+    openModal(`<div class="card-head"><h2 style="margin:0;">${esc(m.label)}</h2><span class="sp"></span>${iconBtn('print','Print','data-a="print"')}${iconBtn('download','Download PDF','data-a="pdf"')}<button class="btn sm" data-a="close">Close</button></div><div id="pfPv"></div>`, box=>{
+      showPreview($('pfPv'), reportPageHtml(cls, m, s, item.rec, lhOpt()));
+      box.querySelector('[data-a=close]').onclick = closeModal;
+      box.querySelector('[data-a=print]').onclick = ()=>printReports([item], lhOpt());
+      box.querySelector('[data-a=pdf]').onclick = ()=>downloadReports([item], lhOpt(), lastKey(s)+' '+m.label);
+    }, true);
+  });
 }
 
 /* =====================================================================
@@ -902,7 +977,7 @@ function moveStudent(s, fromId, toId){
 function renderStudents(){
   const P = $('panel-students');
   if(stuFilter && !classById(stuFilter)) stuFilter = '';
-  const all = []; st.classes.forEach(c=> studentsOf(c.id).forEach(s=> all.push({c, s})));
+  const all = []; st.classes.forEach(c=> sortedStudents(c.id).forEach(s=> all.push({c, s})));
   const inClass = stuFilter ? all.filter(r=>r.c.id===stuFilter) : all;
   const q = stuSearch.trim().toLowerCase();
   const shown = q ? inClass.filter(r=> (enName(r.s)+' '+(r.s.nameHe||'')).toLowerCase().includes(q)) : inClass;
@@ -918,7 +993,7 @@ function renderStudents(){
     <div class="card">${chips}
       <div class="card-head"><input type="text" id="stuSearch" placeholder="Search" value="${esc(stuSearch)}" style="width:240px;"></div>
       ${shown.length ? `<table class="t"><thead><tr><th style="width:1%;">#</th><th>Name</th><th>Hebrew name</th>${stuFilter?'':'<th>Class</th>'}<th></th></tr></thead><tbody>
-        ${shown.map((r,i)=>`<tr data-cid="${esc(r.c.id)}" data-sid="${esc(r.s.id)}"><td class="num">${i+1}</td><td>${esc(r.s.name||'')}</td><td>${he(r.s.nameHe||'')}</td>${stuFilter?'':`<td>${esc(classLabel(r.c))}</td>`}
+        ${shown.map((r,i)=>`<tr data-cid="${esc(r.c.id)}" data-sid="${esc(r.s.id)}"><td class="num">${i+1}</td><td><a href="#" data-open>${esc(r.s.name||'')}</a></td><td><a href="#" data-open>${he(r.s.nameHe||'')}</a></td>${stuFilter?'':`<td>${esc(classLabel(r.c))}</td>`}
         <td class="act">${iconBtn('edit','Edit','data-act="edit"')}${iconBtn('trash','Remove','data-act="del"','danger')}</td></tr>`).join('')}
       </tbody></table>` : '<div class="empty">No students</div>'}
     </div>`;
@@ -937,6 +1012,7 @@ function renderStudents(){
   };
   $('addStuBtn').addEventListener('click', add);
   ['newStuEn','newStuHe'].forEach(id=> $(id).addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } }));
+  P.querySelectorAll('[data-open]').forEach(a=> a.addEventListener('click', e=>{ e.preventDefault(); const tr = a.closest('tr'); openProfile(tr.dataset.cid, tr.dataset.sid); }));
   P.querySelectorAll('[data-act]').forEach(b=> b.addEventListener('click', async ()=>{
     const tr = b.closest('tr'), cid = tr.dataset.cid, s = studentsOf(cid).find(x=>x.id===tr.dataset.sid); if(!s) return;
     if(b.dataset.act==='del'){
@@ -1041,17 +1117,17 @@ function cellValue(d, def){ if(def.type==='cat') return (d.cat||{})[def.id]; if(
 function setCellValue(d, def, v){ if(def.type==='cat') d.cat[def.id] = v; else if(def.type==='week'){ if(!d.week[def.id]) d.week[def.id] = ['','','','','']; d.week[def.id][def.week] = v; } else d[def.type] = v; }
 function gridHead(cls, wc, parshiot, editable){
   const catS = cls.subjects.filter(s=>s.kind==='cat'), weekS = cls.subjects.filter(s=>s.kind==='week');
-  let g = `<tr class="grp"><th rowspan="2">תלמיד</th><th colspan="3">נוכחות</th>`;
-  if(catS.length) g += `<th colspan="${catS.length}">ניקוד (1–10)</th>`;
+  let g = `<tr class="grp"><th rowspan="2">תלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
+  if(catS.length) g += `<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`;
   for(let w=0; w<wc; w++){
     if(!weekS.length) continue;
     let ctl = '';
     if(editable && w===wc-1 && wc<5) ctl = `<button type="button" class="wk-btn" data-wk="add" data-tip="Add week 5">+</button>`;
     if(editable && w===4) ctl = `<button type="button" class="wk-btn" data-wk="remove" data-tip="Remove week 5">×</button>`;
-    g += `<th colspan="${weekS.length}" class="wkh"><div class="wk">שבוע ${w+1} ${ctl}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parshiot[w]||'')}"></th>`;
+    g += `<th colspan="${weekS.length}" class="wkh gs"><div class="wk">שבוע ${w+1} ${ctl}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parshiot[w]||'')}"></th>`;
   }
-  g += '</tr><tr><th>חסר</th><th>איחור</th><th>יצא מוקדם</th>' + catS.map(s=>`<th>${esc(s.label)}</th>`).join('');
-  for(let w=0; w<wc; w++) g += weekS.map(s=>`<th>${esc(s.label)}</th>`).join('');
+  const defs = buildColumnDefs(cls, wc), gs = groupStarts(defs);
+  g += '</tr><tr>' + defs.map((d,i)=>`<th class="${gs[i]?'gs':''}">${esc(d.he)}</th>`).join('');
   return g + '</tr>';
 }
 function renderScores(){
@@ -1072,13 +1148,13 @@ function renderScores(){
 function renderScoresGrid(){
   const box = $('scGrid'), cls = classById(scoreClassId), month = monthById(scoreMonthId);
   if(!cls || !month){ box.innerHTML = `<div class="empty">${st.classes.length?'Pick a class and month':'Add a class first in Settings → Classes &amp; Staff'}</div>`; return; }
-  const rec = getGradeRecord(cls.id, month.id), wc = rec.weekCount, defs = buildColumnDefs(cls, wc), students = studentsOf(cls.id);
+  const rec = getGradeRecord(cls.id, month.id), wc = rec.weekCount, defs = buildColumnDefs(cls, wc), students = sortedStudents(cls.id), gs = groupStarts(defs);
   const label = enName(cls)+' · '+month.label;
   box.innerHTML = `<div class="grid-wrap" dir="rtl"><table class="entry rtl"><thead>${gridHead(cls, wc, rec.parshiot, true)}</thead><tbody>${
     students.length ? students.map((s,r)=>{
       if(!rec.perStudent[s.id]) rec.perStudent[s.id] = emptyStudentRecord(cls);
       const d = ensureRecordShape(rec.perStudent[s.id], cls);
-      return `<tr><td class="name">${esc(heName(s))}</td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}"></td>`; }).join('') + '</tr>';
+      return `<tr><td class="name">${esc(heName(s))}</td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}"></td>`; }).join('') + '</tr>';
     }).join('') : `<tr><td colspan="${defs.length+1}"><div class="empty">No students in this class</div></td></tr>`
   }</tbody></table></div>`;
   box.querySelectorAll('.parsha').forEach(inp=> inp.addEventListener('input', ()=>{ rec.parshiot[+inp.dataset.idx] = inp.value; saveAll('Scores', label); }));
@@ -1119,6 +1195,7 @@ function moveFocus(cur, key, inputs, nRows, nCols, shift){
 const LIB_H2I = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js';
 const LIB_PDF = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
 ICON.download = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+ICON.review = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>';
 ICON.gen = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg>';
 let printFrame = null;
 function printHtml(title, headHtml, bodyHtml, extraScript){
@@ -1140,32 +1217,75 @@ function printHtml(title, headHtml, bodyHtml, extraScript){
   };
   if(f.contentDocument.readyState==='complete') setTimeout(go, 150); else f.onload = go;
 }
-async function downloadPdf(filename, html, opt){
+const LIB_ZIP = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+const safeFile = n => String(n||'file').replace(/[\\\/:*?"<>|]/g,'-').replace(/\s+/g,' ').trim();
+let pdfJob = null;
+function showProgress(title){
+  openModal(`<h2>${esc(title)}</h2><div class="progress" style="height:10px;"><div id="pdfBar" style="width:0%"></div></div>
+    <div id="pdfMsg" class="small muted" style="margin-top:8px;">Starting…</div>
+    <div class="actions"><button class="btn sec" id="pdfCancel">Cancel</button></div>`, box=>{
+    $('pdfCancel').onclick = ()=>{ if(pdfJob) pdfJob.cancel = true; $('pdfMsg').textContent = 'Cancelling…'; };
+  });
+}
+function setProgress(done, total, msg){ const b = $('pdfBar'), m = $('pdfMsg'); if(b) b.style.width = Math.round(done/Math.max(1,total)*100)+'%'; if(m) m.textContent = msg; }
+function saveBlob(blob, name){ const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000); }
+/* docs: [{name, html}] – one PDF each. combined:true → one PDF with every page. */
+async function makePdfs(docs, opt){
   opt = opt || {};
-  toast('Preparing PDF…');
-  try{ await loadScript(LIB_H2I, 'htmlToImage'); await loadScript(LIB_PDF, 'jspdf'); }
-  catch(e){ toast('Could not load the PDF tool. Check the internet connection.'); return; }
+  if(!docs.length) return;
+  if(pdfJob){ toast('A PDF is already being made'); return; }
+  const job = pdfJob = {cancel:false};
+  showProgress(opt.title || 'Making PDF');
+  try{
+    await loadScript(LIB_H2I, 'htmlToImage'); await loadScript(LIB_PDF, 'jspdf');
+    if(!opt.combined && docs.length>1) await loadScript(LIB_ZIP, 'JSZip');
+  }catch(e){ closeModal(); pdfJob = null; toast('Could not load the PDF tool. Check the internet connection.'); return; }
+  const land = !!opt.landscape, W = land ? 11 : 8.5, Hh = land ? 8.5 : 11, fontCss = ($('reportFontFace')||{}).textContent || '';
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;left:-30000px;top:0;z-index:-1;';
-  host.innerHTML = (opt.css ? `<style>${opt.css}</style>` : '') + html;
   document.body.appendChild(host);
+  const total = docs.reduce((n,d)=> n + (d.pages || 1), 0);
+  let done = 0;
+  const newPdf = ()=> new window.jspdf.jsPDF({orientation: land ? 'landscape' : 'portrait', unit:'in', format:'letter', compress:true});
+  const zip = (!opt.combined && docs.length>1) ? new window.JSZip() : null;
+  let pdf = opt.combined ? newPdf() : null, first = true;
   try{
-    await Promise.all(Array.from(host.querySelectorAll('img')).map(i=> i.decode ? i.decode().catch(()=>{}) : null));
-    if(document.fonts) await document.fonts.ready;
-    fitReports(host);
-    const pages = Array.from(host.querySelectorAll(opt.selector || '.report-page, .sheet'));
-    const land = !!opt.landscape, W = land ? 11 : 8.5, Hh = land ? 8.5 : 11;
-    const pdf = new window.jspdf.jsPDF({orientation: land ? 'landscape' : 'portrait', unit:'in', format:'letter', compress:true});
-    const fontCss = ($('reportFontFace')||{}).textContent || '';
-    for(let i=0; i<pages.length; i++){
-      const url = await window.htmlToImage.toJpeg(pages[i], {quality:.93, pixelRatio:2.5, backgroundColor:'#ffffff', fontEmbedCSS: fontCss, cacheBust:false});
-      if(i) pdf.addPage('letter', land ? 'landscape' : 'portrait');
-      pdf.addImage(url, 'JPEG', 0, 0, W, Hh, undefined, 'FAST');
+    for(const d of docs){
+      if(job.cancel) break;
+      host.innerHTML = (opt.css ? `<style>${opt.css}</style>` : '') + d.html;
+      await Promise.all(Array.from(host.querySelectorAll('img')).map(i=> i.decode ? i.decode().catch(()=>{}) : null));
+      if(document.fonts) await document.fonts.ready;
+      fitReports(host);
+      if(!opt.combined){ pdf = newPdf(); first = true; }
+      for(const pg of Array.from(host.querySelectorAll(opt.selector || '.report-page, .sheet'))){
+        if(job.cancel) break;
+        setProgress(done, total, `${d.label || d.name} · ${done+1} of ${total}`);
+        const url = await window.htmlToImage.toJpeg(pg, {quality:.95, pixelRatio:3, backgroundColor:'#ffffff', fontEmbedCSS: fontCss, cacheBust:false});
+        if(!first) pdf.addPage('letter', land ? 'landscape' : 'portrait');
+        pdf.addImage(url, 'JPEG', 0, 0, W, Hh, undefined, 'FAST'); first = false;
+        done++;
+      }
+      if(job.cancel) break;
+      if(!opt.combined){ if(zip) zip.file((d.folder ? safeFile(d.folder)+'/' : '')+safeFile(d.name)+'.pdf', pdf.output('blob')); else pdf.save(safeFile(d.name)+'.pdf'); }
     }
-    pdf.save(filename.replace(/[\\\/:*?"<>|]/g,'-'));
-    toast('PDF downloaded');
+    if(job.cancel){ toast('Cancelled'); return; }
+    setProgress(total, total, 'Saving…');
+    if(opt.combined) pdf.save(safeFile(opt.name)+'.pdf');
+    else if(zip) saveBlob(await zip.generateAsync({type:'blob'}), safeFile(opt.name)+'.zip');
+    toast('Downloaded');
   }catch(e){ console.error(e); toast('Could not make the PDF'); }
-  finally{ host.remove(); }
+  finally{ host.remove(); pdfJob = null; closeModal(); }
+}
+// asks combined or one file each, then makes the PDFs
+function askPdf(docs, opt){
+  if(docs.length<=1) return makePdfs(docs, Object.assign({combined:true, name: docs[0] && docs[0].name}, opt));
+  openModal(`<h2>Download PDF</h2><p class="small muted" style="margin-bottom:12px;">${docs.length} ${esc(opt.unit||'files')}${opt.extra?' · '+esc(opt.extra):''}</p>
+    <div class="fl"><label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink);"><input type="radio" name="pdfKind" value="one" checked> One combined PDF</label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink);"><input type="radio" name="pdfKind" value="each"> A separate PDF for each (in a ZIP)</label></div>
+    <div class="actions"><button class="btn sec" data-a="no">Cancel</button><button class="btn" data-a="yes">${ICON.download}Download</button></div>`, box=>{
+    box.querySelector('[data-a=no]').onclick = closeModal;
+    box.querySelector('[data-a=yes]').onclick = ()=>{ const each = box.querySelector('[name=pdfKind]:checked').value==='each'; closeModal(); makePdfs(docs, Object.assign({}, opt, {combined:!each})); };
+  });
 }
 
 /* =====================================================================
@@ -1180,7 +1300,7 @@ function sheetLayout(cls, monthId){
   ensureClassShape(cls);
   const rec = recFor(cls.id, monthId), wc = rec ? rec.weekCount : 4;
   return {
-    rows: studentsOf(cls.id).map(s=>({sid:s.id, nameHe: heName(s)})),
+    rows: sortedStudents(cls.id).map(s=>({sid:s.id, nameHe: heName(s)})),
     cols: buildColumnDefs(cls, wc).map(d=>({type:d.type, id:d.id, week:d.week, he:d.he})),
     weekCount: wc,
     classHe: heName(cls), teacherHe: heName(teacherOf(cls))
@@ -1233,31 +1353,44 @@ const SHEET_CSS = `
 .sheet table.sh td.nm{text-align:right; padding-right:6px; white-space:nowrap; overflow:hidden; font-weight:600;}
 .sheet table.sh td.no{color:#5a7479; font-size:11px;}
 .sheet table.sh tbody tr:nth-child(even) td.nm, .sheet table.sh tbody tr:nth-child(even) td.no{background:#f6f9f9;}
+.sheet table.sh .gs{border-right:3px solid #0b4856 !important;}
+.sheet table.sh thead tr.g th.gs{border-right-color:#d5aa4e !important;}
+.sheet table.sh td.val{font-size:15px; font-weight:700; color:#0b4856;}
+.sheet .pf{color:#fff; font-size:11px;}
+.sheet .sh-review{border:2px solid #d5aa4e; color:#0b4856; font-weight:700; padding:8px 14px; border-radius:6px; font-size:15px;}
 .sheet .sh-foot{position:absolute; bottom:.3in; left:.45in; right:.45in; font-size:10.5px; color:#5a7479; display:flex; justify-content:space-between;}
 `;
 const SHEET_PRINT_HEAD = `<style>${SHEET_CSS} @page{size:letter landscape; margin:0;} body{margin:0;} .sheet{page-break-after:always;} .sheet:last-child{page-break-after:auto;}</style>`;
-function sheetHtml(sh, monthLabel){
-  const L = sh.layout, logo = $('railLogo').src;
+const colGroup = c => c.type==='cat' ? 'cat' : c.type==='week' ? 'w'+c.week : 'att';
+const groupStarts = cols => cols.map((c,i)=> i===0 || colGroup(c)!==colGroup(cols[i-1]));
+// fill: {rec} prints the saved scores and parsha names (copy for the teacher to review)
+function sheetHtml(sh, monthLabel, fill){
+  const L = sh.layout, logo = $('railLogo').src, gs = groupStarts(L.cols);
   const catCols = L.cols.filter(c=>c.type==='cat'), weekCols = L.cols.filter(c=>c.type==='week' && c.week===0);
   const n = Math.max(1, L.rows.length);
   const rowH = Math.min(0.46, 5.55/n), fs = rowH < 0.2 ? 11 : rowH < 0.26 ? 12.5 : 14;
-  let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3">נוכחות</th>`;
-  if(catCols.length) g += `<th colspan="${catCols.length}">ציונים חודשיים (1–10)</th>`;
-  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk">שבוע ${w+1}<span class="p">פרשה: <span></span></span></th>`;
-  let s = '<tr class="s"><th>חסר</th><th>איחור</th><th>יצא מוקדם</th>' + catCols.map(c=>`<th>${esc(c.he)}</th>`).join('');
-  for(let w=0; w<L.weekCount; w++) s += weekCols.map(c=>`<th>${esc(c.he)}</th>`).join('');
-  const body = L.rows.map((r,i)=>`<tr style="height:${rowH}in;"><td class="no">${i+1}</td><td class="nm" style="font-size:${fs}px;">${esc(r.nameHe)}</td>${L.cols.map(()=>'<td></td>').join('')}</tr>`).join('');
-  const pcode = sh.code+'-P1';
-  return `<div class="sheet"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  const rec = fill && fill.rec, par = rec ? rec.parshiot : [];
+  let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
+  if(catCols.length) g += `<th colspan="${catCols.length}" class="gs">ציונים חודשיים (1–10)</th>`;
+  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">פרשה: ${par[w] ? `<b class="pf">${esc(par[w])}</b>` : '<span></span>'}</span></th>`;
+  let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc(c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he)}</th>`).join('');
+  const body = L.rows.map((r,i)=>{
+    const d = rec && rec.perStudent[r.sid];
+    return `<tr style="height:${rowH}in;"><td class="no">${i+1}</td><td class="nm" style="font-size:${fs}px;">${esc(r.nameHe)}</td>${L.cols.map((c,ci)=>`<td class="${gs[ci]?'gs':''}${fill?' val':''}">${d ? esc(cellValue(d, c)||'') : ''}</td>`).join('')}</tr>`;
+  }).join('');
+  const right = fill ? `<div class="sh-review">לבדיקת המלמד</div>` : `<div class="sh-code">${qrImg(sh.code+'-P1')}${esc(sh.code+'-P1')}</div>`;
+  return `<div class="sheet">${fill?'':'<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>'}
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
-      <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · המלמד <b>${esc(L.teacherHe)}</b>`:''}</div></div>
-      <div class="sh-code">${qrImg(pcode)}${esc(pcode)}</div></div>
+      <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · המלמד <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
     <table class="sh"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody></table>
     <div class="sh-foot"><span>ציונים שבועיים 0–100 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים</span><span>ישיבה גדילת תורה</span></div></div>`;
 }
+// filled copy built from today's scores (no QR – not for scanning)
+function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}); }
 function sheetsHtml(keys){ return keys.map(k=>{ const sh = st.sheets[k], m = monthById(k.split('::')[1]); return sh && m ? sheetHtml(sh, m.label) : ''; }).join(''); }
+function sheetDocs(keys){ return keys.filter(k=>st.sheets[k]).map(k=>{ const c = classById(k.split('::')[0]), m = monthById(k.split('::')[1]); return {name: 'גליון הערכה '+heName(c)+' '+(m?m.label:''), label: heName(c), html: sheetsHtml([k])}; }); }
 function printSheets(keys){ const h = sheetsHtml(keys); if(h) printHtml('Assessments', SHEET_PRINT_HEAD, h); }
-function downloadSheets(keys, name){ const h = sheetsHtml(keys); if(h) downloadPdf(name+'.pdf', h, {css:SHEET_CSS, landscape:true, selector:'.sheet'}); }
+function downloadSheets(keys, name){ const docs = sheetDocs(keys); if(docs.length) askPdf(docs, {name, title:'Making assessment PDF', unit:'classes', css:SHEET_CSS, landscape:true, selector:'.sheet'}); }
 function previewSheets(keys, title){
   const h = sheetsHtml(keys); if(!h) return;
   openModal(`<div class="card-head"><h2 style="margin:0;">${esc(title)}</h2><span class="sp"></span><button class="btn sec sm" data-a="print">${ICON.print}Print</button><button class="btn sec sm" data-a="pdf">${ICON.download}PDF</button><button class="btn sm" data-a="close">Close</button></div>
@@ -1547,7 +1680,7 @@ function renderScanArea(){
     const sh = st.sheets[pg.key], [cid, mid] = pg.key.split('::'), cls = classById(cid), month = monthById(mid);
     if(!sh || !cls || !month){ detail = `<div class="notice bad">This sheet was ungenerated.</div><button class="btn sec sm" data-sa="drop">Remove</button>`; }
     else {
-      const L = sh.layout, rows = L.rows.slice((pg.page-1)*ROWS_PER_PAGE, pg.page*ROWS_PER_PAGE);
+      const L = sh.layout, rows = L.rows.slice((pg.page-1)*ROWS_PER_PAGE, pg.page*ROWS_PER_PAGE), gsR = groupStarts(L.cols);
       const rec = recFor(cls.id, month.id);
       const parsh = []; for(let w=0; w<L.weekCount; w++) parsh[w] = (pg.parsha && pg.parsha[w]) || (rec && rec.parshiot[w]) || '';
       const problems = pageProblems(pg);
@@ -1560,7 +1693,7 @@ function renderScanArea(){
             const s = studentsOf(cls.id).find(x=>x.id===r.sid), d = rec && rec.perStudent[r.sid];
             return `<tr><td class="name">${esc(r.nameHe)}${s?'':' <span class="tag bad">Removed</span>'}</td>${L.cols.map((c,ci)=>{
               const v = ((pg.values||{})[r.sid]||{})[ci] || '', un = ((pg.unsure||{})[r.sid]||{})[ci], old = d ? (cellValue(d, c)||'') : '';
-              const cls2 = !validCell(c, v) ? 'bad' : (un ? 'unsure' : '');
+              const cls2 = (!validCell(c, v) ? 'bad' : (un ? 'unsure' : '')) + (gsR[ci] ? ' gs' : '');
               return `<td class="${cls2}" ${un?'data-tip="Needs review"':''}><input type="text" data-sid="${esc(r.sid)}" data-ci="${ci}" value="${esc(v)}" placeholder="${esc(old)}" ${pg.status==='saved'?'disabled':''}></td>`;
             }).join('')}</tr>`; }).join('')}</tbody></table></div>
           <div class="muted small" style="margin-top:6px;">Grey numbers are what's already saved. Blank boxes keep them.</div>
@@ -1600,10 +1733,9 @@ function renderScanArea(){
 }
 function reviewHead(L, parsh){
   const catCols = L.cols.filter(c=>c.type==='cat'), weekCols = L.cols.filter(c=>c.type==='week' && c.week===0);
-  let g = `<tr class="grp"><th rowspan="2">תלמיד</th><th colspan="3">נוכחות</th>${catCols.length?`<th colspan="${catCols.length}">ניקוד (1–10)</th>`:''}`;
-  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wkh"><div class="wk">שבוע ${w+1}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parsh[w]||'')}"></th>`;
-  g += '</tr><tr><th>חסר</th><th>איחור</th><th>יצא מוקדם</th>' + catCols.map(c=>`<th>${esc(c.he)}</th>`).join('');
-  for(let w=0; w<L.weekCount; w++) g += weekCols.map(c=>`<th>${esc(c.he)}</th>`).join('');
+  let g = `<tr class="grp"><th rowspan="2">תלמיד</th><th colspan="3" class="gs">נוכחות</th>${catCols.length?`<th colspan="${catCols.length}" class="gs">ניקוד (1–10)</th>`:''}`;
+  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wkh gs"><div class="wk">שבוע ${w+1}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parsh[w]||'')}"></th>`;
+  g += '</tr><tr>' + L.cols.map((c,i,a)=>`<th class="${i===0||colGroup(c)!==colGroup(a[i-1])?'gs':''}">${esc(c.he)}</th>`).join('');
   return g + '</tr>';
 }
 function saveScanPage(pg, quiet){
@@ -1695,78 +1827,64 @@ function reportCss(){
 }
 function reportsHtml(items, opt){ return items.map(r=>reportPageHtml(r.cls, r.month, r.s, r.rec, opt)).join(''); }
 function printReports(items, opt){ const h = reportsHtml(items, opt); if(h) printHtml('Reports', `<style>${reportCss()}</style>`, h, FIT_SCRIPT); }
-function downloadReports(items, opt, name){ const h = reportsHtml(items, opt); if(h) downloadPdf(name+'.pdf', h, {selector:'.report-page'}); }
-
-/* ---------- approval status ---------- */
-function classMonthSig(cls, monthId){
-  const rec = recFor(cls.id, monthId);
-  return hashStr(JSON.stringify([rec ? {p:rec.parshiot, w:rec.weekCount, d:studentsOf(cls.id).map(s=>rec.perStudent[s.id]||null)} : null, studentsOf(cls.id).map(s=>heName(s)), cls.subjects, heName(cls), heName(teacherOf(cls))]));
+function reportDocs(items, opt, folders){ return items.map(r=>({name: lastKey(r.s), label: heName(r.s), folder: folders ? 'כתה '+heName(r.cls) : '', html: reportPageHtml(r.cls, r.month, r.s, r.rec, opt)})); }
+function downloadReports(items, opt, name, folders){ if(items.length) askPdf(reportDocs(items, opt, folders), {name, title:'Making report PDF', unit:'reports', extra:'sorted by last name', selector:'.report-page'}); }
+/* review sheets: the assessment filled with the saved scores, for teachers to check */
+function printReview(classes, monthId){ const h = classes.map(c=>reviewSheetHtml(c, monthId)).join(''); if(h) printHtml('Review', SHEET_PRINT_HEAD, h); }
+function downloadReview(classes, monthId, name){
+  const m = monthById(monthId);
+  const docs = classes.map(c=>({name:'לבדיקה '+heName(c)+' '+(m?m.label:''), label: heName(c), html: reviewSheetHtml(c, monthId)}));
+  if(docs.length) askPdf(docs, {name, title:'Making review PDF', unit:'classes', css:SHEET_CSS, landscape:true, selector:'.sheet'});
 }
-function reportState(cls, monthId){
-  const r = st.reportStatus[gradeKey(cls.id, monthId)];
-  if(!r) return 'none';
-  if(r.status==='approved') return r.sig===classMonthSig(cls, monthId) ? 'approved' : 'changed';
-  return 'sent';
-}
-const REP_TAG = {none:'<span class="tag">Not printed</span>', sent:'<span class="tag wait">Sent to teacher</span>', approved:'<span class="tag ok">Approved</span>', changed:'<span class="tag warn">Changed after approval</span>'};
 
 /* ---------- page: a box per month, like Assessments ---------- */
 let repMonthId = '', repSel = null;   // {classId, idx}
-function classItems(cls, monthId){ const m = monthById(monthId), rec = recFor(cls.id, monthId); return studentsOf(cls.id).map(s=>({cls, month:m, s, rec})); }
+function classItems(cls, monthId){ const m = monthById(monthId), rec = recFor(cls.id, monthId); return sortedStudents(cls.id).map(s=>({cls, month:m, s, rec})); }
 const repClasses = () => st.classes.filter(c=>studentsOf(c.id).length);
-function approvedItems(monthId){ const out = []; repClasses().forEach(c=>{ if(reportState(c, monthId)==='approved') out.push(...classItems(c, monthId)); }); return out; }
+const scoredClasses = monthId => repClasses().filter(c=>monthHasScores(c.id, monthId));
+function monthItems(monthId){ const out = []; scoredClasses(monthId).forEach(c=> out.push(...classItems(c, monthId))); return out; }
 const lhOpt = () => ({letterhead: st.printLetterhead});
+const seg = (label, html) => `<span class="seg"><small>${label}</small>${html}</span>`;
 function renderReports(){
   const P = $('panel-reports'), months = sortedMonths(), classes = repClasses();
   if(!months.some(m=>m.id===repMonthId)){
-    const withStatus = months.filter(m=> classes.some(c=>st.reportStatus[gradeKey(c.id, m.id)]));
-    const withData = months.filter(m=> classes.some(c=>monthHasScores(c.id, m.id)));
-    repMonthId = (withStatus[withStatus.length-1] || withData[withData.length-1] || months[0] || {}).id || '';
+    const withData = months.filter(m=> scoredClasses(m.id).length);
+    repMonthId = (withData[withData.length-1] || months[0] || {}).id || '';
   }
   if(repSel && (!classById(repSel.classId))) repSel = null;
   const cards = months.map(m=>{
-    const states = classes.map(c=>reportState(c, m.id));
-    const ap = states.filter(s=>s==='approved').length, sent = states.filter(s=>s==='sent').length, ch = states.filter(s=>s==='changed').length;
-    const scored = classes.filter(c=>monthHasScores(c.id, m.id)).length;
-    const sub = !scored ? 'No scores yet' : `${ap}/${classes.length} approved${sent?` · ${sent} sent`:''}${ch?` · ${ch} changed`:''}`;
-    const dis = ap ? '' : 'disabled';
-    return `<div class="mcard ${m.id===repMonthId?'sel':''} ${ch?'stale':''}" data-m="${m.id}"><div class="m">${esc(m.label)}</div><div class="s">${sub}</div>
-      <div class="acts">${iconBtn('view','Open this month','data-mact="open"')}${canEdit()||true?`<button type="button" class="icon-btn" data-tip="${ap?'Print approved reports':'Nothing approved yet'}" data-mact="print" ${dis}>${ICON.print}</button><button type="button" class="icon-btn" data-tip="${ap?'Download approved as PDF':'Nothing approved yet'}" data-mact="pdf" ${dis}>${ICON.download}</button>`:''}${ap?`<span class="tag ok" style="margin-left:auto;">${ap}</span>`:''}</div></div>`;
+    const sc = scoredClasses(m.id).length, dis = sc ? '' : 'disabled';
+    const b = (act, icon, tip) => `<button type="button" class="icon-btn" data-mact="${act}" data-tip="${tip}" ${dis}>${ICON[icon]}</button>`;
+    return `<div class="mcard ${m.id===repMonthId?'sel':''}" data-m="${m.id}"><div class="m">${esc(m.label)}</div><div class="s">${sc ? `${sc}/${classes.length} classes with scores` : 'No scores yet'}</div>
+      <div class="acts">${seg('Review', b('rprint','print','Print review sheets')+b('rpdf','download','Review sheets PDF'))}${seg('Reports', b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</div></div>`;
   }).join('');
   const month = monthById(repMonthId);
-  const table = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Scores</th><th>Status</th><th></th></tr></thead><tbody>${classes.map(c=>{
-      const n = studentsOf(c.id).length, rec = recFor(c.id, month.id), filled = rec ? studentsOf(c.id).filter(s=>hasAnyScore(rec.perStudent[s.id])).length : 0;
-      const stt = reportState(c, month.id), ok = stt==='approved';
+  const table = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students with scores</th><th></th></tr></thead><tbody>${classes.map(c=>{
+      const n = studentsOf(c.id).length, rec = recFor(c.id, month.id), filled = rec ? studentsOf(c.id).filter(s=>hasAnyScore(rec.perStudent[s.id])).length : 0, dis = filled ? '' : 'disabled';
+      const b = (act, icon, tip) => `<button type="button" class="icon-btn" data-ract="${act}" data-tip="${tip}" ${dis}>${ICON[icon]}</button>`;
       return `<tr data-cid="${esc(c.id)}" class="click ${repSel&&repSel.classId===c.id?'sel':''}"><td>${esc(enName(c))} ${c.nameHe?`<span class="muted">· ${he(c.nameHe)}</span>`:''}</td><td>${he(heName(teacherOf(c)))}</td>
-        <td><span class="${filled===n?'':'muted'}">${filled}/${n}</span></td><td>${REP_TAG[stt]}</td>
-        <td class="act">${iconBtn('view','Preview','data-ract="preview"')}
-          ${canEdit()?`<button class="btn sm sec" data-ract="teacher" data-tip="Print for the teacher to check">${ICON.print}Teacher copy</button>
-          ${ok ? iconBtn('ban','Remove approval','data-ract="unapprove"') : `<button class="btn sm ok" data-ract="approve">${ICON.check}Approve</button>`}`:''}
-          <button type="button" class="icon-btn" data-ract="print" ${ok||!canEdit()?'':'disabled'} data-tip="${ok||!canEdit()?'Print':'Approve first'}">${ICON.print}</button>
-          <button type="button" class="icon-btn" data-ract="pdf" ${ok||!canEdit()?'':'disabled'} data-tip="${ok||!canEdit()?'Download PDF':'Approve first'}">${ICON.download}</button></td></tr>`;
+        <td><span class="${filled===n?'':'muted'}">${filled}/${n}</span></td>
+        <td class="act">${iconBtn('view','Preview','data-ract="preview"')}${seg('Review', b('rprint','print','Print review sheet')+b('rpdf','download','Review sheet PDF'))}${seg('Reports', b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">No classes with students</div>'}</div>` : '';
   P.innerHTML = pageHead('Reports', `<select id="repLh"><option value="with">With letterhead</option><option value="without">Without letterhead</option></select>`) +
-    `<div class="month-cards">${cards}</div>${table}<div id="repPreviewCard"></div>`;
+    `<div class="month-cards wide">${cards}</div>${table}<div id="repPreviewCard"></div>`;
   $('repLh').value = st.printLetterhead ? 'with' : 'without';
   $('repLh').addEventListener('change', e=>{ st.printLetterhead = e.target.value==='with'; saveAll('Letterhead on reports', e.target.value); renderRepPreview(); });
   P.querySelectorAll('.mcard').forEach(card=> card.addEventListener('click', e=>{ if(e.target.closest('button')) return; repMonthId = card.dataset.m; repSel = null; renderReports(); }));
   P.querySelectorAll('[data-mact]').forEach(b=> b.addEventListener('click', e=>{
     e.stopPropagation();
-    const m = monthById(b.closest('.mcard').dataset.m), a = b.dataset.mact;
-    if(a==='open'){ repMonthId = m.id; repSel = null; renderReports(); return; }
-    const items = approvedItems(m.id); if(!items.length) return;
-    if(a==='print') printReports(items, lhOpt()); else downloadReports(items, lhOpt(), 'Reports '+m.label);
+    const m = monthById(b.closest('.mcard').dataset.m), a = b.dataset.mact, cls = scoredClasses(m.id);
+    if(a==='rprint') printReview(cls, m.id);
+    else if(a==='rpdf') downloadReview(cls, m.id, 'Review sheets '+m.label);
+    else if(a==='print') printReports(monthItems(m.id), lhOpt());
+    else if(a==='pdf') downloadReports(monthItems(m.id), lhOpt(), 'Reports '+m.label, true);
   }));
   P.querySelectorAll('[data-ract]').forEach(b=> b.addEventListener('click', e=>{
     e.stopPropagation();
-    const cls = classById(b.closest('tr').dataset.cid), key = gradeKey(cls.id, month.id), lbl = enName(cls)+' · '+month.label, a = b.dataset.ract;
+    const cls = classById(b.closest('tr').dataset.cid), a = b.dataset.ract;
     if(a==='preview'){ repSel = {classId: cls.id, idx:0}; renderReports(); setTimeout(()=>$('repPreviewCard').scrollIntoView({behavior:'smooth'}), 30); }
-    else if(a==='teacher'){
-      printReports(classItems(cls, month.id), {letterhead:false, copyMark:'עותק לאישור – '+heName(teacherOf(cls))});
-      if(reportState(cls, month.id)!=='approved'){ st.reportStatus[key] = {status:'sent', at:Date.now()}; saveAll('Teacher copy printed', lbl); renderReports(); }
-    }
-    else if(a==='approve'){ st.reportStatus[key] = {status:'approved', at:Date.now(), sig:classMonthSig(cls, month.id)}; saveAll('Reports approved', lbl); doneWithUndo(enName(cls)+' approved'); renderReports(); }
-    else if(a==='unapprove'){ st.reportStatus[key] = {status:'sent', at:Date.now()}; saveAll('Approval removed', lbl); doneWithUndo('Approval removed'); renderReports(); }
+    else if(a==='rprint') printReview([cls], month.id);
+    else if(a==='rpdf') downloadReview([cls], month.id, 'לבדיקה '+heName(cls)+' '+month.label);
     else if(a==='print') printReports(classItems(cls, month.id), lhOpt());
     else if(a==='pdf') downloadReports(classItems(cls, month.id), lhOpt(), 'Reports '+enName(cls)+' '+month.label);
   }));
@@ -1785,16 +1903,8 @@ function renderRepPreview(){
     <div style="max-width:720px;margin:0 auto;" id="repPv"></div></div>`;
   showPreview($('repPv'), reportPageHtml(r.cls, r.month, r.s, r.rec, lhOpt()));
   card.querySelectorAll('[data-pg]').forEach(b=> b.onclick = ()=>{ repSel.idx = (repSel.idx + Number(b.dataset.pg) + items.length) % items.length; renderRepPreview(); });
-  card.querySelectorAll('[data-one]').forEach(b=> b.onclick = ()=>{ if(b.dataset.one==='print') printReports([r], lhOpt()); else downloadReports([r], lhOpt(), 'Report '+enName(r.s)+' '+month.label); });
+  card.querySelectorAll('[data-one]').forEach(b=> b.onclick = ()=>{ if(b.dataset.one==='print') printReports([r], lhOpt()); else downloadReports([r], lhOpt(), lastKey(r.s)+' '+month.label); });
   $('repStu').onchange = e=>{ repSel.idx = Number(e.target.value); renderRepPreview(); };
-}
-function openStudentReport(classId, sid){
-  const months = sortedMonths().filter(m=>{ const r = recFor(classId, m.id); return r && hasAnyScore(r.perStudent[sid]); });
-  if(months.length) repMonthId = months[months.length-1].id;
-  const idx = Math.max(0, studentsOf(classId).findIndex(s=>s.id===sid));
-  repSel = {classId, idx};
-  activateTab('reports');
-  setTimeout(()=>{ const c = $('repPreviewCard'); if(c) c.scrollIntoView({behavior:'smooth'}); }, 50);
 }
 
 /* ---------- Report Setup (Settings) ---------- */
@@ -1871,10 +1981,10 @@ function renderSettings(){
 function renderYearTab(){
   const box = $('stBody'), last = schoolYears().slice(-1)[0] || st.currentYear, next = hebYearStr(yearNum(last)+1);
   box.innerHTML = `<div class="card"><div class="card-head"><h2>Current school year</h2><select id="yearSel" dir="rtl">${options(schoolYears(), y=>y, y=>y, st.currentYear)}</select><span class="sp"></span><button class="btn" id="newYear">Start ${esc(next)}</button></div>
-    <table class="t"><thead><tr><th>Month</th><th>Classes with scores</th><th>Assessments</th><th>Reports approved</th></tr></thead><tbody>${sortedMonths().map(m=>{
+    <table class="t"><thead><tr><th>Month</th><th>Classes with scores</th><th>Assessments</th><th>Scanned</th></tr></thead><tbody>${sortedMonths().map(m=>{
       const cl = st.classes.filter(c=>studentsOf(c.id).length);
-      const sc = cl.filter(c=>monthHasScores(c.id, m.id)).length, sh = cl.filter(c=>st.sheets[gradeKey(c.id,m.id)]).length, ap = cl.filter(c=>reportState(c, m.id)==='approved').length;
-      return `<tr><td>${he(m.label)}</td><td>${sc}/${cl.length}</td><td>${sh}/${cl.length}</td><td>${ap}/${cl.length}</td></tr>`; }).join('')}</tbody></table></div>`;
+      const sc = cl.filter(c=>monthHasScores(c.id, m.id)).length, sh = cl.filter(c=>st.sheets[gradeKey(c.id,m.id)]).length, sn = cl.filter(c=>sheetState(c, m.id)==='scanned').length;
+      return `<tr><td>${he(m.label)}</td><td>${sc}/${cl.length}</td><td>${sh}/${cl.length}</td><td>${sn}/${cl.length}</td></tr>`; }).join('')}</tbody></table></div>`;
   $('yearSel').onchange = e=>{ st.currentYear = e.target.value; saveAll('School year', st.currentYear); renderYearTab(); };
   $('newYear').onclick = async ()=>{
     if(!await askConfirm('Start school year '+next+'?', 'Classes, staff and students stay. Dashboard, scores, assessments and reports switch to '+next+'.', 'Start', '')) return;
@@ -2252,8 +2362,6 @@ function buildSampleData(){
         });
       });
       if(mn==='תשרי'){ st.sheets[gradeKey(cls.id, m.id)] = {code:newCode(), at:Date.now(), layout:sheetLayout(cls, m.id), sig:'', scannedAt:Date.now()}; st.sheets[gradeKey(cls.id, m.id)].sig = layoutSig(st.sheets[gradeKey(cls.id, m.id)].layout); }
-      if(mn==='אלול') st.reportStatus[gradeKey(cls.id, m.id)] = {status:'approved', at:Date.now(), sig:classMonthSig(cls, m.id)};
-      if(mn==='תשרי' && p.heN==='א') st.reportStatus[gradeKey(cls.id, m.id)] = {status:'sent', at:Date.now()};
     });
   });
 }

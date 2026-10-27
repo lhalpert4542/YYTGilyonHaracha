@@ -6,6 +6,7 @@
 const LIB_H2I = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js';
 const LIB_PDF = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
 ICON.download = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+ICON.review = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>';
 ICON.gen = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg>';
 let printFrame = null;
 function printHtml(title, headHtml, bodyHtml, extraScript){
@@ -27,32 +28,75 @@ function printHtml(title, headHtml, bodyHtml, extraScript){
   };
   if(f.contentDocument.readyState==='complete') setTimeout(go, 150); else f.onload = go;
 }
-async function downloadPdf(filename, html, opt){
+const LIB_ZIP = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+const safeFile = n => String(n||'file').replace(/[\\\/:*?"<>|]/g,'-').replace(/\s+/g,' ').trim();
+let pdfJob = null;
+function showProgress(title){
+  openModal(`<h2>${esc(title)}</h2><div class="progress" style="height:10px;"><div id="pdfBar" style="width:0%"></div></div>
+    <div id="pdfMsg" class="small muted" style="margin-top:8px;">Starting…</div>
+    <div class="actions"><button class="btn sec" id="pdfCancel">Cancel</button></div>`, box=>{
+    $('pdfCancel').onclick = ()=>{ if(pdfJob) pdfJob.cancel = true; $('pdfMsg').textContent = 'Cancelling…'; };
+  });
+}
+function setProgress(done, total, msg){ const b = $('pdfBar'), m = $('pdfMsg'); if(b) b.style.width = Math.round(done/Math.max(1,total)*100)+'%'; if(m) m.textContent = msg; }
+function saveBlob(blob, name){ const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000); }
+/* docs: [{name, html}] – one PDF each. combined:true → one PDF with every page. */
+async function makePdfs(docs, opt){
   opt = opt || {};
-  toast('Preparing PDF…');
-  try{ await loadScript(LIB_H2I, 'htmlToImage'); await loadScript(LIB_PDF, 'jspdf'); }
-  catch(e){ toast('Could not load the PDF tool. Check the internet connection.'); return; }
+  if(!docs.length) return;
+  if(pdfJob){ toast('A PDF is already being made'); return; }
+  const job = pdfJob = {cancel:false};
+  showProgress(opt.title || 'Making PDF');
+  try{
+    await loadScript(LIB_H2I, 'htmlToImage'); await loadScript(LIB_PDF, 'jspdf');
+    if(!opt.combined && docs.length>1) await loadScript(LIB_ZIP, 'JSZip');
+  }catch(e){ closeModal(); pdfJob = null; toast('Could not load the PDF tool. Check the internet connection.'); return; }
+  const land = !!opt.landscape, W = land ? 11 : 8.5, Hh = land ? 8.5 : 11, fontCss = ($('reportFontFace')||{}).textContent || '';
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;left:-30000px;top:0;z-index:-1;';
-  host.innerHTML = (opt.css ? `<style>${opt.css}</style>` : '') + html;
   document.body.appendChild(host);
+  const total = docs.reduce((n,d)=> n + (d.pages || 1), 0);
+  let done = 0;
+  const newPdf = ()=> new window.jspdf.jsPDF({orientation: land ? 'landscape' : 'portrait', unit:'in', format:'letter', compress:true});
+  const zip = (!opt.combined && docs.length>1) ? new window.JSZip() : null;
+  let pdf = opt.combined ? newPdf() : null, first = true;
   try{
-    await Promise.all(Array.from(host.querySelectorAll('img')).map(i=> i.decode ? i.decode().catch(()=>{}) : null));
-    if(document.fonts) await document.fonts.ready;
-    fitReports(host);
-    const pages = Array.from(host.querySelectorAll(opt.selector || '.report-page, .sheet'));
-    const land = !!opt.landscape, W = land ? 11 : 8.5, Hh = land ? 8.5 : 11;
-    const pdf = new window.jspdf.jsPDF({orientation: land ? 'landscape' : 'portrait', unit:'in', format:'letter', compress:true});
-    const fontCss = ($('reportFontFace')||{}).textContent || '';
-    for(let i=0; i<pages.length; i++){
-      const url = await window.htmlToImage.toJpeg(pages[i], {quality:.93, pixelRatio:2.5, backgroundColor:'#ffffff', fontEmbedCSS: fontCss, cacheBust:false});
-      if(i) pdf.addPage('letter', land ? 'landscape' : 'portrait');
-      pdf.addImage(url, 'JPEG', 0, 0, W, Hh, undefined, 'FAST');
+    for(const d of docs){
+      if(job.cancel) break;
+      host.innerHTML = (opt.css ? `<style>${opt.css}</style>` : '') + d.html;
+      await Promise.all(Array.from(host.querySelectorAll('img')).map(i=> i.decode ? i.decode().catch(()=>{}) : null));
+      if(document.fonts) await document.fonts.ready;
+      fitReports(host);
+      if(!opt.combined){ pdf = newPdf(); first = true; }
+      for(const pg of Array.from(host.querySelectorAll(opt.selector || '.report-page, .sheet'))){
+        if(job.cancel) break;
+        setProgress(done, total, `${d.label || d.name} · ${done+1} of ${total}`);
+        const url = await window.htmlToImage.toJpeg(pg, {quality:.95, pixelRatio:3, backgroundColor:'#ffffff', fontEmbedCSS: fontCss, cacheBust:false});
+        if(!first) pdf.addPage('letter', land ? 'landscape' : 'portrait');
+        pdf.addImage(url, 'JPEG', 0, 0, W, Hh, undefined, 'FAST'); first = false;
+        done++;
+      }
+      if(job.cancel) break;
+      if(!opt.combined){ if(zip) zip.file((d.folder ? safeFile(d.folder)+'/' : '')+safeFile(d.name)+'.pdf', pdf.output('blob')); else pdf.save(safeFile(d.name)+'.pdf'); }
     }
-    pdf.save(filename.replace(/[\\\/:*?"<>|]/g,'-'));
-    toast('PDF downloaded');
+    if(job.cancel){ toast('Cancelled'); return; }
+    setProgress(total, total, 'Saving…');
+    if(opt.combined) pdf.save(safeFile(opt.name)+'.pdf');
+    else if(zip) saveBlob(await zip.generateAsync({type:'blob'}), safeFile(opt.name)+'.zip');
+    toast('Downloaded');
   }catch(e){ console.error(e); toast('Could not make the PDF'); }
-  finally{ host.remove(); }
+  finally{ host.remove(); pdfJob = null; closeModal(); }
+}
+// asks combined or one file each, then makes the PDFs
+function askPdf(docs, opt){
+  if(docs.length<=1) return makePdfs(docs, Object.assign({combined:true, name: docs[0] && docs[0].name}, opt));
+  openModal(`<h2>Download PDF</h2><p class="small muted" style="margin-bottom:12px;">${docs.length} ${esc(opt.unit||'files')}${opt.extra?' · '+esc(opt.extra):''}</p>
+    <div class="fl"><label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink);"><input type="radio" name="pdfKind" value="one" checked> One combined PDF</label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink);"><input type="radio" name="pdfKind" value="each"> A separate PDF for each (in a ZIP)</label></div>
+    <div class="actions"><button class="btn sec" data-a="no">Cancel</button><button class="btn" data-a="yes">${ICON.download}Download</button></div>`, box=>{
+    box.querySelector('[data-a=no]').onclick = closeModal;
+    box.querySelector('[data-a=yes]').onclick = ()=>{ const each = box.querySelector('[name=pdfKind]:checked').value==='each'; closeModal(); makePdfs(docs, Object.assign({}, opt, {combined:!each})); };
+  });
 }
 
 /* =====================================================================
@@ -67,7 +111,7 @@ function sheetLayout(cls, monthId){
   ensureClassShape(cls);
   const rec = recFor(cls.id, monthId), wc = rec ? rec.weekCount : 4;
   return {
-    rows: studentsOf(cls.id).map(s=>({sid:s.id, nameHe: heName(s)})),
+    rows: sortedStudents(cls.id).map(s=>({sid:s.id, nameHe: heName(s)})),
     cols: buildColumnDefs(cls, wc).map(d=>({type:d.type, id:d.id, week:d.week, he:d.he})),
     weekCount: wc,
     classHe: heName(cls), teacherHe: heName(teacherOf(cls))
@@ -120,31 +164,44 @@ const SHEET_CSS = `
 .sheet table.sh td.nm{text-align:right; padding-right:6px; white-space:nowrap; overflow:hidden; font-weight:600;}
 .sheet table.sh td.no{color:#5a7479; font-size:11px;}
 .sheet table.sh tbody tr:nth-child(even) td.nm, .sheet table.sh tbody tr:nth-child(even) td.no{background:#f6f9f9;}
+.sheet table.sh .gs{border-right:3px solid #0b4856 !important;}
+.sheet table.sh thead tr.g th.gs{border-right-color:#d5aa4e !important;}
+.sheet table.sh td.val{font-size:15px; font-weight:700; color:#0b4856;}
+.sheet .pf{color:#fff; font-size:11px;}
+.sheet .sh-review{border:2px solid #d5aa4e; color:#0b4856; font-weight:700; padding:8px 14px; border-radius:6px; font-size:15px;}
 .sheet .sh-foot{position:absolute; bottom:.3in; left:.45in; right:.45in; font-size:10.5px; color:#5a7479; display:flex; justify-content:space-between;}
 `;
 const SHEET_PRINT_HEAD = `<style>${SHEET_CSS} @page{size:letter landscape; margin:0;} body{margin:0;} .sheet{page-break-after:always;} .sheet:last-child{page-break-after:auto;}</style>`;
-function sheetHtml(sh, monthLabel){
-  const L = sh.layout, logo = $('railLogo').src;
+const colGroup = c => c.type==='cat' ? 'cat' : c.type==='week' ? 'w'+c.week : 'att';
+const groupStarts = cols => cols.map((c,i)=> i===0 || colGroup(c)!==colGroup(cols[i-1]));
+// fill: {rec} prints the saved scores and parsha names (copy for the teacher to review)
+function sheetHtml(sh, monthLabel, fill){
+  const L = sh.layout, logo = $('railLogo').src, gs = groupStarts(L.cols);
   const catCols = L.cols.filter(c=>c.type==='cat'), weekCols = L.cols.filter(c=>c.type==='week' && c.week===0);
   const n = Math.max(1, L.rows.length);
   const rowH = Math.min(0.46, 5.55/n), fs = rowH < 0.2 ? 11 : rowH < 0.26 ? 12.5 : 14;
-  let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3">נוכחות</th>`;
-  if(catCols.length) g += `<th colspan="${catCols.length}">ציונים חודשיים (1–10)</th>`;
-  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk">שבוע ${w+1}<span class="p">פרשה: <span></span></span></th>`;
-  let s = '<tr class="s"><th>חסר</th><th>איחור</th><th>יצא מוקדם</th>' + catCols.map(c=>`<th>${esc(c.he)}</th>`).join('');
-  for(let w=0; w<L.weekCount; w++) s += weekCols.map(c=>`<th>${esc(c.he)}</th>`).join('');
-  const body = L.rows.map((r,i)=>`<tr style="height:${rowH}in;"><td class="no">${i+1}</td><td class="nm" style="font-size:${fs}px;">${esc(r.nameHe)}</td>${L.cols.map(()=>'<td></td>').join('')}</tr>`).join('');
-  const pcode = sh.code+'-P1';
-  return `<div class="sheet"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  const rec = fill && fill.rec, par = rec ? rec.parshiot : [];
+  let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
+  if(catCols.length) g += `<th colspan="${catCols.length}" class="gs">ציונים חודשיים (1–10)</th>`;
+  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">פרשה: ${par[w] ? `<b class="pf">${esc(par[w])}</b>` : '<span></span>'}</span></th>`;
+  let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc(c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he)}</th>`).join('');
+  const body = L.rows.map((r,i)=>{
+    const d = rec && rec.perStudent[r.sid];
+    return `<tr style="height:${rowH}in;"><td class="no">${i+1}</td><td class="nm" style="font-size:${fs}px;">${esc(r.nameHe)}</td>${L.cols.map((c,ci)=>`<td class="${gs[ci]?'gs':''}${fill?' val':''}">${d ? esc(cellValue(d, c)||'') : ''}</td>`).join('')}</tr>`;
+  }).join('');
+  const right = fill ? `<div class="sh-review">לבדיקת המלמד</div>` : `<div class="sh-code">${qrImg(sh.code+'-P1')}${esc(sh.code+'-P1')}</div>`;
+  return `<div class="sheet">${fill?'':'<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>'}
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
-      <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · המלמד <b>${esc(L.teacherHe)}</b>`:''}</div></div>
-      <div class="sh-code">${qrImg(pcode)}${esc(pcode)}</div></div>
+      <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · המלמד <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
     <table class="sh"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody></table>
     <div class="sh-foot"><span>ציונים שבועיים 0–100 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים</span><span>ישיבה גדילת תורה</span></div></div>`;
 }
+// filled copy built from today's scores (no QR – not for scanning)
+function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}); }
 function sheetsHtml(keys){ return keys.map(k=>{ const sh = st.sheets[k], m = monthById(k.split('::')[1]); return sh && m ? sheetHtml(sh, m.label) : ''; }).join(''); }
+function sheetDocs(keys){ return keys.filter(k=>st.sheets[k]).map(k=>{ const c = classById(k.split('::')[0]), m = monthById(k.split('::')[1]); return {name: 'גליון הערכה '+heName(c)+' '+(m?m.label:''), label: heName(c), html: sheetsHtml([k])}; }); }
 function printSheets(keys){ const h = sheetsHtml(keys); if(h) printHtml('Assessments', SHEET_PRINT_HEAD, h); }
-function downloadSheets(keys, name){ const h = sheetsHtml(keys); if(h) downloadPdf(name+'.pdf', h, {css:SHEET_CSS, landscape:true, selector:'.sheet'}); }
+function downloadSheets(keys, name){ const docs = sheetDocs(keys); if(docs.length) askPdf(docs, {name, title:'Making assessment PDF', unit:'classes', css:SHEET_CSS, landscape:true, selector:'.sheet'}); }
 function previewSheets(keys, title){
   const h = sheetsHtml(keys); if(!h) return;
   openModal(`<div class="card-head"><h2 style="margin:0;">${esc(title)}</h2><span class="sp"></span><button class="btn sec sm" data-a="print">${ICON.print}Print</button><button class="btn sec sm" data-a="pdf">${ICON.download}PDF</button><button class="btn sm" data-a="close">Close</button></div>
@@ -434,7 +491,7 @@ function renderScanArea(){
     const sh = st.sheets[pg.key], [cid, mid] = pg.key.split('::'), cls = classById(cid), month = monthById(mid);
     if(!sh || !cls || !month){ detail = `<div class="notice bad">This sheet was ungenerated.</div><button class="btn sec sm" data-sa="drop">Remove</button>`; }
     else {
-      const L = sh.layout, rows = L.rows.slice((pg.page-1)*ROWS_PER_PAGE, pg.page*ROWS_PER_PAGE);
+      const L = sh.layout, rows = L.rows.slice((pg.page-1)*ROWS_PER_PAGE, pg.page*ROWS_PER_PAGE), gsR = groupStarts(L.cols);
       const rec = recFor(cls.id, month.id);
       const parsh = []; for(let w=0; w<L.weekCount; w++) parsh[w] = (pg.parsha && pg.parsha[w]) || (rec && rec.parshiot[w]) || '';
       const problems = pageProblems(pg);
@@ -447,7 +504,7 @@ function renderScanArea(){
             const s = studentsOf(cls.id).find(x=>x.id===r.sid), d = rec && rec.perStudent[r.sid];
             return `<tr><td class="name">${esc(r.nameHe)}${s?'':' <span class="tag bad">Removed</span>'}</td>${L.cols.map((c,ci)=>{
               const v = ((pg.values||{})[r.sid]||{})[ci] || '', un = ((pg.unsure||{})[r.sid]||{})[ci], old = d ? (cellValue(d, c)||'') : '';
-              const cls2 = !validCell(c, v) ? 'bad' : (un ? 'unsure' : '');
+              const cls2 = (!validCell(c, v) ? 'bad' : (un ? 'unsure' : '')) + (gsR[ci] ? ' gs' : '');
               return `<td class="${cls2}" ${un?'data-tip="Needs review"':''}><input type="text" data-sid="${esc(r.sid)}" data-ci="${ci}" value="${esc(v)}" placeholder="${esc(old)}" ${pg.status==='saved'?'disabled':''}></td>`;
             }).join('')}</tr>`; }).join('')}</tbody></table></div>
           <div class="muted small" style="margin-top:6px;">Grey numbers are what's already saved. Blank boxes keep them.</div>
@@ -487,10 +544,9 @@ function renderScanArea(){
 }
 function reviewHead(L, parsh){
   const catCols = L.cols.filter(c=>c.type==='cat'), weekCols = L.cols.filter(c=>c.type==='week' && c.week===0);
-  let g = `<tr class="grp"><th rowspan="2">תלמיד</th><th colspan="3">נוכחות</th>${catCols.length?`<th colspan="${catCols.length}">ניקוד (1–10)</th>`:''}`;
-  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wkh"><div class="wk">שבוע ${w+1}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parsh[w]||'')}"></th>`;
-  g += '</tr><tr><th>חסר</th><th>איחור</th><th>יצא מוקדם</th>' + catCols.map(c=>`<th>${esc(c.he)}</th>`).join('');
-  for(let w=0; w<L.weekCount; w++) g += weekCols.map(c=>`<th>${esc(c.he)}</th>`).join('');
+  let g = `<tr class="grp"><th rowspan="2">תלמיד</th><th colspan="3" class="gs">נוכחות</th>${catCols.length?`<th colspan="${catCols.length}" class="gs">ניקוד (1–10)</th>`:''}`;
+  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wkh gs"><div class="wk">שבוע ${w+1}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parsh[w]||'')}"></th>`;
+  g += '</tr><tr>' + L.cols.map((c,i,a)=>`<th class="${i===0||colGroup(c)!==colGroup(a[i-1])?'gs':''}">${esc(c.he)}</th>`).join('');
   return g + '</tr>';
 }
 function saveScanPage(pg, quiet){

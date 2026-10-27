@@ -66,78 +66,64 @@ function reportCss(){
 }
 function reportsHtml(items, opt){ return items.map(r=>reportPageHtml(r.cls, r.month, r.s, r.rec, opt)).join(''); }
 function printReports(items, opt){ const h = reportsHtml(items, opt); if(h) printHtml('Reports', `<style>${reportCss()}</style>`, h, FIT_SCRIPT); }
-function downloadReports(items, opt, name){ const h = reportsHtml(items, opt); if(h) downloadPdf(name+'.pdf', h, {selector:'.report-page'}); }
-
-/* ---------- approval status ---------- */
-function classMonthSig(cls, monthId){
-  const rec = recFor(cls.id, monthId);
-  return hashStr(JSON.stringify([rec ? {p:rec.parshiot, w:rec.weekCount, d:studentsOf(cls.id).map(s=>rec.perStudent[s.id]||null)} : null, studentsOf(cls.id).map(s=>heName(s)), cls.subjects, heName(cls), heName(teacherOf(cls))]));
+function reportDocs(items, opt, folders){ return items.map(r=>({name: lastKey(r.s), label: heName(r.s), folder: folders ? 'כתה '+heName(r.cls) : '', html: reportPageHtml(r.cls, r.month, r.s, r.rec, opt)})); }
+function downloadReports(items, opt, name, folders){ if(items.length) askPdf(reportDocs(items, opt, folders), {name, title:'Making report PDF', unit:'reports', extra:'sorted by last name', selector:'.report-page'}); }
+/* review sheets: the assessment filled with the saved scores, for teachers to check */
+function printReview(classes, monthId){ const h = classes.map(c=>reviewSheetHtml(c, monthId)).join(''); if(h) printHtml('Review', SHEET_PRINT_HEAD, h); }
+function downloadReview(classes, monthId, name){
+  const m = monthById(monthId);
+  const docs = classes.map(c=>({name:'לבדיקה '+heName(c)+' '+(m?m.label:''), label: heName(c), html: reviewSheetHtml(c, monthId)}));
+  if(docs.length) askPdf(docs, {name, title:'Making review PDF', unit:'classes', css:SHEET_CSS, landscape:true, selector:'.sheet'});
 }
-function reportState(cls, monthId){
-  const r = st.reportStatus[gradeKey(cls.id, monthId)];
-  if(!r) return 'none';
-  if(r.status==='approved') return r.sig===classMonthSig(cls, monthId) ? 'approved' : 'changed';
-  return 'sent';
-}
-const REP_TAG = {none:'<span class="tag">Not printed</span>', sent:'<span class="tag wait">Sent to teacher</span>', approved:'<span class="tag ok">Approved</span>', changed:'<span class="tag warn">Changed after approval</span>'};
 
 /* ---------- page: a box per month, like Assessments ---------- */
 let repMonthId = '', repSel = null;   // {classId, idx}
-function classItems(cls, monthId){ const m = monthById(monthId), rec = recFor(cls.id, monthId); return studentsOf(cls.id).map(s=>({cls, month:m, s, rec})); }
+function classItems(cls, monthId){ const m = monthById(monthId), rec = recFor(cls.id, monthId); return sortedStudents(cls.id).map(s=>({cls, month:m, s, rec})); }
 const repClasses = () => st.classes.filter(c=>studentsOf(c.id).length);
-function approvedItems(monthId){ const out = []; repClasses().forEach(c=>{ if(reportState(c, monthId)==='approved') out.push(...classItems(c, monthId)); }); return out; }
+const scoredClasses = monthId => repClasses().filter(c=>monthHasScores(c.id, monthId));
+function monthItems(monthId){ const out = []; scoredClasses(monthId).forEach(c=> out.push(...classItems(c, monthId))); return out; }
 const lhOpt = () => ({letterhead: st.printLetterhead});
+const seg = (label, html) => `<span class="seg"><small>${label}</small>${html}</span>`;
 function renderReports(){
   const P = $('panel-reports'), months = sortedMonths(), classes = repClasses();
   if(!months.some(m=>m.id===repMonthId)){
-    const withStatus = months.filter(m=> classes.some(c=>st.reportStatus[gradeKey(c.id, m.id)]));
-    const withData = months.filter(m=> classes.some(c=>monthHasScores(c.id, m.id)));
-    repMonthId = (withStatus[withStatus.length-1] || withData[withData.length-1] || months[0] || {}).id || '';
+    const withData = months.filter(m=> scoredClasses(m.id).length);
+    repMonthId = (withData[withData.length-1] || months[0] || {}).id || '';
   }
   if(repSel && (!classById(repSel.classId))) repSel = null;
   const cards = months.map(m=>{
-    const states = classes.map(c=>reportState(c, m.id));
-    const ap = states.filter(s=>s==='approved').length, sent = states.filter(s=>s==='sent').length, ch = states.filter(s=>s==='changed').length;
-    const scored = classes.filter(c=>monthHasScores(c.id, m.id)).length;
-    const sub = !scored ? 'No scores yet' : `${ap}/${classes.length} approved${sent?` · ${sent} sent`:''}${ch?` · ${ch} changed`:''}`;
-    const dis = ap ? '' : 'disabled';
-    return `<div class="mcard ${m.id===repMonthId?'sel':''} ${ch?'stale':''}" data-m="${m.id}"><div class="m">${esc(m.label)}</div><div class="s">${sub}</div>
-      <div class="acts">${iconBtn('view','Open this month','data-mact="open"')}${canEdit()||true?`<button type="button" class="icon-btn" data-tip="${ap?'Print approved reports':'Nothing approved yet'}" data-mact="print" ${dis}>${ICON.print}</button><button type="button" class="icon-btn" data-tip="${ap?'Download approved as PDF':'Nothing approved yet'}" data-mact="pdf" ${dis}>${ICON.download}</button>`:''}${ap?`<span class="tag ok" style="margin-left:auto;">${ap}</span>`:''}</div></div>`;
+    const sc = scoredClasses(m.id).length, dis = sc ? '' : 'disabled';
+    const b = (act, icon, tip) => `<button type="button" class="icon-btn" data-mact="${act}" data-tip="${tip}" ${dis}>${ICON[icon]}</button>`;
+    return `<div class="mcard ${m.id===repMonthId?'sel':''}" data-m="${m.id}"><div class="m">${esc(m.label)}</div><div class="s">${sc ? `${sc}/${classes.length} classes with scores` : 'No scores yet'}</div>
+      <div class="acts">${seg('Review', b('rprint','print','Print review sheets')+b('rpdf','download','Review sheets PDF'))}${seg('Reports', b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</div></div>`;
   }).join('');
   const month = monthById(repMonthId);
-  const table = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Scores</th><th>Status</th><th></th></tr></thead><tbody>${classes.map(c=>{
-      const n = studentsOf(c.id).length, rec = recFor(c.id, month.id), filled = rec ? studentsOf(c.id).filter(s=>hasAnyScore(rec.perStudent[s.id])).length : 0;
-      const stt = reportState(c, month.id), ok = stt==='approved';
+  const table = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students with scores</th><th></th></tr></thead><tbody>${classes.map(c=>{
+      const n = studentsOf(c.id).length, rec = recFor(c.id, month.id), filled = rec ? studentsOf(c.id).filter(s=>hasAnyScore(rec.perStudent[s.id])).length : 0, dis = filled ? '' : 'disabled';
+      const b = (act, icon, tip) => `<button type="button" class="icon-btn" data-ract="${act}" data-tip="${tip}" ${dis}>${ICON[icon]}</button>`;
       return `<tr data-cid="${esc(c.id)}" class="click ${repSel&&repSel.classId===c.id?'sel':''}"><td>${esc(enName(c))} ${c.nameHe?`<span class="muted">· ${he(c.nameHe)}</span>`:''}</td><td>${he(heName(teacherOf(c)))}</td>
-        <td><span class="${filled===n?'':'muted'}">${filled}/${n}</span></td><td>${REP_TAG[stt]}</td>
-        <td class="act">${iconBtn('view','Preview','data-ract="preview"')}
-          ${canEdit()?`<button class="btn sm sec" data-ract="teacher" data-tip="Print for the teacher to check">${ICON.print}Teacher copy</button>
-          ${ok ? iconBtn('ban','Remove approval','data-ract="unapprove"') : `<button class="btn sm ok" data-ract="approve">${ICON.check}Approve</button>`}`:''}
-          <button type="button" class="icon-btn" data-ract="print" ${ok||!canEdit()?'':'disabled'} data-tip="${ok||!canEdit()?'Print':'Approve first'}">${ICON.print}</button>
-          <button type="button" class="icon-btn" data-ract="pdf" ${ok||!canEdit()?'':'disabled'} data-tip="${ok||!canEdit()?'Download PDF':'Approve first'}">${ICON.download}</button></td></tr>`;
+        <td><span class="${filled===n?'':'muted'}">${filled}/${n}</span></td>
+        <td class="act">${iconBtn('view','Preview','data-ract="preview"')}${seg('Review', b('rprint','print','Print review sheet')+b('rpdf','download','Review sheet PDF'))}${seg('Reports', b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">No classes with students</div>'}</div>` : '';
   P.innerHTML = pageHead('Reports', `<select id="repLh"><option value="with">With letterhead</option><option value="without">Without letterhead</option></select>`) +
-    `<div class="month-cards">${cards}</div>${table}<div id="repPreviewCard"></div>`;
+    `<div class="month-cards wide">${cards}</div>${table}<div id="repPreviewCard"></div>`;
   $('repLh').value = st.printLetterhead ? 'with' : 'without';
   $('repLh').addEventListener('change', e=>{ st.printLetterhead = e.target.value==='with'; saveAll('Letterhead on reports', e.target.value); renderRepPreview(); });
   P.querySelectorAll('.mcard').forEach(card=> card.addEventListener('click', e=>{ if(e.target.closest('button')) return; repMonthId = card.dataset.m; repSel = null; renderReports(); }));
   P.querySelectorAll('[data-mact]').forEach(b=> b.addEventListener('click', e=>{
     e.stopPropagation();
-    const m = monthById(b.closest('.mcard').dataset.m), a = b.dataset.mact;
-    if(a==='open'){ repMonthId = m.id; repSel = null; renderReports(); return; }
-    const items = approvedItems(m.id); if(!items.length) return;
-    if(a==='print') printReports(items, lhOpt()); else downloadReports(items, lhOpt(), 'Reports '+m.label);
+    const m = monthById(b.closest('.mcard').dataset.m), a = b.dataset.mact, cls = scoredClasses(m.id);
+    if(a==='rprint') printReview(cls, m.id);
+    else if(a==='rpdf') downloadReview(cls, m.id, 'Review sheets '+m.label);
+    else if(a==='print') printReports(monthItems(m.id), lhOpt());
+    else if(a==='pdf') downloadReports(monthItems(m.id), lhOpt(), 'Reports '+m.label, true);
   }));
   P.querySelectorAll('[data-ract]').forEach(b=> b.addEventListener('click', e=>{
     e.stopPropagation();
-    const cls = classById(b.closest('tr').dataset.cid), key = gradeKey(cls.id, month.id), lbl = enName(cls)+' · '+month.label, a = b.dataset.ract;
+    const cls = classById(b.closest('tr').dataset.cid), a = b.dataset.ract;
     if(a==='preview'){ repSel = {classId: cls.id, idx:0}; renderReports(); setTimeout(()=>$('repPreviewCard').scrollIntoView({behavior:'smooth'}), 30); }
-    else if(a==='teacher'){
-      printReports(classItems(cls, month.id), {letterhead:false, copyMark:'עותק לאישור – '+heName(teacherOf(cls))});
-      if(reportState(cls, month.id)!=='approved'){ st.reportStatus[key] = {status:'sent', at:Date.now()}; saveAll('Teacher copy printed', lbl); renderReports(); }
-    }
-    else if(a==='approve'){ st.reportStatus[key] = {status:'approved', at:Date.now(), sig:classMonthSig(cls, month.id)}; saveAll('Reports approved', lbl); doneWithUndo(enName(cls)+' approved'); renderReports(); }
-    else if(a==='unapprove'){ st.reportStatus[key] = {status:'sent', at:Date.now()}; saveAll('Approval removed', lbl); doneWithUndo('Approval removed'); renderReports(); }
+    else if(a==='rprint') printReview([cls], month.id);
+    else if(a==='rpdf') downloadReview([cls], month.id, 'לבדיקה '+heName(cls)+' '+month.label);
     else if(a==='print') printReports(classItems(cls, month.id), lhOpt());
     else if(a==='pdf') downloadReports(classItems(cls, month.id), lhOpt(), 'Reports '+enName(cls)+' '+month.label);
   }));
@@ -156,16 +142,8 @@ function renderRepPreview(){
     <div style="max-width:720px;margin:0 auto;" id="repPv"></div></div>`;
   showPreview($('repPv'), reportPageHtml(r.cls, r.month, r.s, r.rec, lhOpt()));
   card.querySelectorAll('[data-pg]').forEach(b=> b.onclick = ()=>{ repSel.idx = (repSel.idx + Number(b.dataset.pg) + items.length) % items.length; renderRepPreview(); });
-  card.querySelectorAll('[data-one]').forEach(b=> b.onclick = ()=>{ if(b.dataset.one==='print') printReports([r], lhOpt()); else downloadReports([r], lhOpt(), 'Report '+enName(r.s)+' '+month.label); });
+  card.querySelectorAll('[data-one]').forEach(b=> b.onclick = ()=>{ if(b.dataset.one==='print') printReports([r], lhOpt()); else downloadReports([r], lhOpt(), lastKey(r.s)+' '+month.label); });
   $('repStu').onchange = e=>{ repSel.idx = Number(e.target.value); renderRepPreview(); };
-}
-function openStudentReport(classId, sid){
-  const months = sortedMonths().filter(m=>{ const r = recFor(classId, m.id); return r && hasAnyScore(r.perStudent[sid]); });
-  if(months.length) repMonthId = months[months.length-1].id;
-  const idx = Math.max(0, studentsOf(classId).findIndex(s=>s.id===sid));
-  repSel = {classId, idx};
-  activateTab('reports');
-  setTimeout(()=>{ const c = $('repPreviewCard'); if(c) c.scrollIntoView({behavior:'smooth'}); }, 50);
 }
 
 /* ---------- Report Setup (Settings) ---------- */

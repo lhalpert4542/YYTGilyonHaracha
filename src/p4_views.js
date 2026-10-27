@@ -11,7 +11,7 @@ const NAV = [
   ['settings','Settings','<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'],
   ['audit','Audit Log','<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>']
 ];
-const VIEW_TABS = ['dashboard','reports'];
+const VIEW_TABS = ['dashboard','reports','profile'];
 let activeTab = 'dashboard';
 function buildNav(){
   $('mainNav').innerHTML = NAV.filter(([k])=> canEdit() || VIEW_TABS.includes(k)).map(([k,l,i])=>`<button type="button" data-tab="${k}">${i}<span>${l}</span></button>`).join('');
@@ -21,13 +21,13 @@ function activateTab(tab){
   if(!canEdit() && !VIEW_TABS.includes(tab)) tab = 'dashboard';
   flushNow();
   activeTab = tab;
-  document.querySelectorAll('#mainNav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('#mainNav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab || (tab==='profile' && b.dataset.tab===(canEdit()?'students':'dashboard'))));
   document.querySelectorAll('section.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+tab));
   renderActive();
   window.scrollTo(0,0);
 }
 function renderActive(){
-  ({dashboard:renderDashboard, students:renderStudents, scores:renderScores, assessments:renderAssessments, reports:renderReports, settings:renderSettings, audit:renderAudit}[activeTab] || (()=>{}))();
+  ({dashboard:renderDashboard, profile:renderProfile, students:renderStudents, scores:renderScores, assessments:renderAssessments, reports:renderReports, settings:renderSettings, audit:renderAudit}[activeTab] || (()=>{}))();
 }
 const pageHead = (title, extra='') => `<div class="page-head"><h1>${esc(title)}</h1><span class="sp"></span>${extra}</div>`;
 const classLabel = c => enName(c) + (c.nameHe && c.nameHe!==enName(c) ? ' · '+c.nameHe : '');
@@ -72,58 +72,95 @@ function hasAnyScore(d){
 const monthHasScores = (classId, monthId) => { const r = recFor(classId, monthId); return !!r && Object.values(r.perStudent).some(hasAnyScore); };
 
 /* =====================================================================
-   Dashboard (Hebrew names)
+   Dashboard – compact lists with Hebrew names; click a student to open them
    ===================================================================== */
+function studentTotals(cls, sid){
+  let ab = 0, la = 0, ye = 0;
+  sortedMonths().forEach(m=>{ const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return;
+    const n = v => (v!=='' && v!=null && !isNaN(Number(v))) ? Number(v) : 0;
+    ab += n(d.chesarim); la += n(d.ichurim); ye += n(d.yatza); });
+  return {ab, la, ye};
+}
 function renderDashboard(){
   const T = st.dashboardThresholds, P = $('panel-dashboard');
-  let nStudents = 0; const allAvgs = [], low = [];
-  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=>{
-    nStudents++;
-    const a = studentYearAvg(cls, s.id);
-    if(a!==null){ allAvgs.push(a); if(a < T.low) low.push({cls, s, avg:a}); }
-  }));
-  low.sort((a,b)=>a.avg-b.avg);
-  const lowS = [], highS = [];
-  unionSubjects().forEach(subj=> st.classes.forEach(cls=>{
-    const a = classSubjectYearAvg(cls, subj); if(a===null) return;
-    const r = {subject:subj.label, cls, avg:a};
-    if(a < T.low) lowS.push(r); if(a >= T.high) highS.push(r);
-  }));
-  lowS.sort((a,b)=>a.avg-b.avg); highS.sort((a,b)=>b.avg-a.avg);
-  const totals = [];
-  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=>{
-    let ab = 0, la = 0;
-    sortedMonths().forEach(m=>{ const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[s.id]; if(!d) return;
-      if(d.chesarim!=='' && !isNaN(Number(d.chesarim))) ab += Number(d.chesarim);
-      if(d.ichurim!=='' && !isNaN(Number(d.ichurim))) la += Number(d.ichurim); });
-    totals.push({cls, s, ab, la});
-  }));
-  const abs = totals.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab);
-  const lat = totals.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
+  const all = [];
+  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=>{ const t = studentTotals(cls, s.id); all.push(Object.assign({cls, s, avg: studentYearAvg(cls, s.id)}, t)); }));
+  const low = all.filter(r=>r.avg!==null && r.avg < T.low).sort((a,b)=>a.avg-b.avg);
+  const high = all.filter(r=>r.avg!==null && r.avg >= T.high).sort((a,b)=>b.avg-a.avg);
+  const abs = all.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab);
+  const lat = all.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
   const monthsWith = sortedMonths().filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id))).length;
-  const ya = avgOf(allAvgs);
   const thr = k => `<input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0" ${canEdit()?'':'disabled'}>`;
-  const stuTable = (rows, val, klass) => rows.length ? `<table class="t"><thead><tr><th>Student</th><th>Class</th><th style="width:1%;">${val==='avg'?'Average':'Total'}</th></tr></thead><tbody>${rows.map(r=>`<tr class="click" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}"><td>${he(heName(r.s))}</td><td>${he(heName(r.cls))}</td><td class="${klass}" style="text-align:center;">${val==='avg'?Math.round(r.avg):r[val]}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">None</div>';
-  const subTable = (rows, klass) => rows.length ? `<table class="t"><thead><tr><th>Subject</th><th>Class</th><th style="width:1%;">Average</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${he(r.subject)}</td><td>${he(heName(r.cls))}</td><td class="${klass}" style="text-align:center;">${Math.round(r.avg)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">None</div>';
+  const list = (rows, val, klass) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}"><span class="v ${klass}">${val(r)}</span><span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
   P.innerHTML = pageHead('Dashboard', `<span class="tag wait he" style="font-size:13px;">${esc(st.currentYear)}</span>`) + `
-    <div class="stat-grid">
-      <div class="stat"><div class="n">${nStudents}</div><div class="l">Students</div></div>
+    <div class="stat-grid three">
+      <div class="stat"><div class="n">${all.length}</div><div class="l">Students</div></div>
       <div class="stat"><div class="n">${st.classes.length}</div><div class="l">Classes</div></div>
-      <div class="stat"><div class="n">${ya===null?'—':Math.round(ya)}</div><div class="l">Year average</div></div>
       <div class="stat"><div class="n">${monthsWith}</div><div class="l">Months with scores</div></div>
     </div>
-    <div class="dash-grid">
-      <div class="card ins low wide"><h2>Students averaging below ${thr('low')} <span class="pill">${low.length}</span></h2><div class="scroll-x">${stuTable(low,'avg','bad-cell')}</div></div>
-      <div class="card ins low"><h2>Class subjects below ${thr('low')} <span class="pill">${lowS.length}</span></h2><div class="scroll-x">${subTable(lowS,'bad-cell')}</div></div>
-      <div class="card ins high"><h2>Class subjects at ${thr('high')} or above <span class="pill">${highS.length}</span></h2><div class="scroll-x">${subTable(highS,'good-cell')}</div></div>
-      <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2><div class="scroll-x">${stuTable(abs,'ab','bad-cell')}</div></div>
-      <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2><div class="scroll-x">${stuTable(lat,'la','mid-cell')}</div></div>
+    <div class="dash-cols">
+      <div class="card ins low"><h2>Below ${thr('low')} <span class="pill">${low.length}</span></h2>${list(low, r=>Math.round(r.avg), 'bad')}</div>
+      <div class="card ins high"><h2>${thr('high')} and up <span class="pill">${high.length}</span></h2>${list(high, r=>Math.round(r.avg), 'good')}</div>
+      <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2>${list(abs, r=>r.ab, 'bad')}</div>
+      <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2>${list(lat, r=>r.la, 'mid')}</div>
     </div>`;
   P.querySelectorAll('.thr').forEach(inp=> inp.addEventListener('change', ()=>{
     st.dashboardThresholds[inp.dataset.thr] = Math.max(0, Math.floor(Number(inp.value)||0));
     saveAll('Dashboard limits'); renderDashboard();
   }));
-  P.querySelectorAll('tr.click').forEach(tr=> tr.addEventListener('click', ()=> openStudentReport(tr.dataset.cls, tr.dataset.sid)));
+  P.querySelectorAll('.drow').forEach(b=> b.addEventListener('click', ()=> openProfile(b.dataset.cls, b.dataset.sid)));
+}
+
+/* =====================================================================
+   Student profile – scores by month and reports (like Kriah)
+   ===================================================================== */
+let profile = null;   // {classId, sid}
+function openProfile(classId, sid){ profile = {classId, sid}; activateTab('profile'); }
+const openStudentReport = openProfile;
+function renderProfile(){
+  const P = $('panel-profile'), cls = profile && classById(profile.classId), s = cls && studentsOf(cls.id).find(x=>x.id===profile.sid);
+  if(!s){ P.innerHTML = '<div class="empty">Student not found</div>'; return; }
+  const months = sortedMonths().filter(m=>{ const r = recFor(cls.id, m.id); return r && hasAnyScore(r.perStudent[s.id]); });
+  const catS = cls.subjects.filter(x=>x.kind==='cat'), weekS = cls.subjects.filter(x=>x.kind==='week');
+  const t = studentTotals(cls, s.id), ya = studentYearAvg(cls, s.id);
+  const rows = months.map(m=>{
+    const rec = recFor(cls.id, m.id), d = ensureRecordShape(clone(rec.perStudent[s.id]), cls);
+    const wAvg = sj => avgOf((d.week[sj.id]||[]).slice(0, rec.weekCount));
+    return {m, rec, d, avg: studentOverallAvg(d, cls, rec.weekCount), wAvg};
+  });
+  const T = st.dashboardThresholds, tone = v => v===null ? '' : v < T.low ? 'bad-cell' : v >= T.high ? 'good-cell' : '';
+  const trend = rows.length ? `<div class="trend">${rows.map(r=>{ const v = r.avg===null ? 0 : Math.round(r.avg); return `<div class="tb"><div class="bar-wrap"><div class="bar ${v<T.low?'b':v>=T.high?'g':''}" style="height:${Math.max(4,v)}%"></div></div><b>${r.avg===null?'—':v}</b><span class="he">${esc(monthName(r.m.label))}</span></div>`; }).join('')}</div>` : '<div class="empty">No scores yet</div>';
+  const head = `<tr class="grp"><th rowspan="2">חודש</th><th colspan="3" class="gs">נוכחות</th>${catS.length?`<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`:''}${weekS.length?`<th colspan="${weekS.length}" class="gs">ממוצע שבועי</th>`:''}<th rowspan="2" class="gs">ממוצע</th></tr>
+    <tr><th class="gs">חסר</th><th>איחור</th><th>יצא מוקדם</th>${catS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}${weekS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}</tr>`;
+  const body = rows.map(r=>`<tr class="click" data-m="${r.m.id}"><td class="name">${esc(r.m.label)}</td><td class="gs">${esc(r.d.chesarim)}</td><td>${esc(r.d.ichurim)}</td><td>${esc(r.d.yatza)}</td>
+    ${catS.map((x,i)=>`<td class="${i===0?'gs':''}">${esc(r.d.cat[x.id]||'')}</td>`).join('')}${weekS.map((x,i)=>{ const a = r.wAvg(x); return `<td class="${i===0?'gs':''}">${a===null?'':Math.round(a)}</td>`; }).join('')}
+    <td class="gs ${tone(r.avg)}">${r.avg===null?'':Math.round(r.avg)}</td></tr>`).join('');
+  P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}Students</button><span class="sp"></span>${canEdit()?`<button class="btn sec" id="pfEdit">${ICON.edit}Edit scores</button>`:''}</div>
+    <div class="card pf-head"><div><div class="pf-name he">${esc(heName(s))}</div><div class="muted">${esc(s.name||'')}</div></div>
+      <div class="pf-meta"><div><span class="muted small">Class</span><b>${esc(classLabel(cls))}</b></div><div><span class="muted small">Teacher</span><b class="he">${esc(heName(teacherOf(cls))||'—')}</b></div></div></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="n ${ya===null?'':ya<T.low?'t-bad':ya>=T.high?'t-good':''}">${ya===null?'—':Math.round(ya)}</div><div class="l">Average</div></div>
+      <div class="stat"><div class="n">${t.ab}</div><div class="l">Absences</div></div>
+      <div class="stat"><div class="n">${t.la}</div><div class="l">Lates</div></div>
+      <div class="stat"><div class="n">${t.ye}</div><div class="l">Left early</div></div>
+    </div>
+    <div class="card"><h2>Average by month</h2>${trend}</div>
+    <div class="card"><h2>Scores</h2>${rows.length ? `<div class="grid-wrap" dir="rtl"><table class="entry rtl pf-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>` : '<div class="empty">No scores yet</div>'}</div>
+    <div class="card"><h2>Reports</h2>${rows.length ? `<table class="t"><tbody>${rows.map(r=>`<tr data-m="${r.m.id}"><td>${he(r.m.label)}</td><td class="act">${iconBtn('view','Preview','data-pr="view"')}${iconBtn('print','Print','data-pr="print"')}${iconBtn('download','Download PDF','data-pr="pdf"')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No reports yet</div>'}</div>`;
+  $('pfBack').onclick = ()=>{ stuFilter = cls.id; activateTab('students'); };
+  if($('pfEdit')) $('pfEdit').onclick = ()=>{ scoreClassId = cls.id; scoreMonthId = (months[months.length-1]||{}).id || ''; activateTab('scores'); };
+  P.querySelectorAll('.pf-table tr.click').forEach(tr=> tr.onclick = ()=>{ if(!canEdit()) return; scoreClassId = cls.id; scoreMonthId = tr.dataset.m; activateTab('scores'); });
+  P.querySelectorAll('[data-pr]').forEach(b=> b.onclick = ()=>{
+    const m = monthById(b.closest('tr').dataset.m), item = {cls, month:m, s, rec:recFor(cls.id, m.id)};
+    if(b.dataset.pr==='print') return printReports([item], lhOpt());
+    if(b.dataset.pr==='pdf') return downloadReports([item], lhOpt(), lastKey(s)+' '+m.label);
+    openModal(`<div class="card-head"><h2 style="margin:0;">${esc(m.label)}</h2><span class="sp"></span>${iconBtn('print','Print','data-a="print"')}${iconBtn('download','Download PDF','data-a="pdf"')}<button class="btn sm" data-a="close">Close</button></div><div id="pfPv"></div>`, box=>{
+      showPreview($('pfPv'), reportPageHtml(cls, m, s, item.rec, lhOpt()));
+      box.querySelector('[data-a=close]').onclick = closeModal;
+      box.querySelector('[data-a=print]').onclick = ()=>printReports([item], lhOpt());
+      box.querySelector('[data-a=pdf]').onclick = ()=>downloadReports([item], lhOpt(), lastKey(s)+' '+m.label);
+    }, true);
+  });
 }
 
 /* =====================================================================
@@ -172,7 +209,7 @@ function moveStudent(s, fromId, toId){
 function renderStudents(){
   const P = $('panel-students');
   if(stuFilter && !classById(stuFilter)) stuFilter = '';
-  const all = []; st.classes.forEach(c=> studentsOf(c.id).forEach(s=> all.push({c, s})));
+  const all = []; st.classes.forEach(c=> sortedStudents(c.id).forEach(s=> all.push({c, s})));
   const inClass = stuFilter ? all.filter(r=>r.c.id===stuFilter) : all;
   const q = stuSearch.trim().toLowerCase();
   const shown = q ? inClass.filter(r=> (enName(r.s)+' '+(r.s.nameHe||'')).toLowerCase().includes(q)) : inClass;
@@ -188,7 +225,7 @@ function renderStudents(){
     <div class="card">${chips}
       <div class="card-head"><input type="text" id="stuSearch" placeholder="Search" value="${esc(stuSearch)}" style="width:240px;"></div>
       ${shown.length ? `<table class="t"><thead><tr><th style="width:1%;">#</th><th>Name</th><th>Hebrew name</th>${stuFilter?'':'<th>Class</th>'}<th></th></tr></thead><tbody>
-        ${shown.map((r,i)=>`<tr data-cid="${esc(r.c.id)}" data-sid="${esc(r.s.id)}"><td class="num">${i+1}</td><td>${esc(r.s.name||'')}</td><td>${he(r.s.nameHe||'')}</td>${stuFilter?'':`<td>${esc(classLabel(r.c))}</td>`}
+        ${shown.map((r,i)=>`<tr data-cid="${esc(r.c.id)}" data-sid="${esc(r.s.id)}"><td class="num">${i+1}</td><td><a href="#" data-open>${esc(r.s.name||'')}</a></td><td><a href="#" data-open>${he(r.s.nameHe||'')}</a></td>${stuFilter?'':`<td>${esc(classLabel(r.c))}</td>`}
         <td class="act">${iconBtn('edit','Edit','data-act="edit"')}${iconBtn('trash','Remove','data-act="del"','danger')}</td></tr>`).join('')}
       </tbody></table>` : '<div class="empty">No students</div>'}
     </div>`;
@@ -207,6 +244,7 @@ function renderStudents(){
   };
   $('addStuBtn').addEventListener('click', add);
   ['newStuEn','newStuHe'].forEach(id=> $(id).addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } }));
+  P.querySelectorAll('[data-open]').forEach(a=> a.addEventListener('click', e=>{ e.preventDefault(); const tr = a.closest('tr'); openProfile(tr.dataset.cid, tr.dataset.sid); }));
   P.querySelectorAll('[data-act]').forEach(b=> b.addEventListener('click', async ()=>{
     const tr = b.closest('tr'), cid = tr.dataset.cid, s = studentsOf(cid).find(x=>x.id===tr.dataset.sid); if(!s) return;
     if(b.dataset.act==='del'){
@@ -311,17 +349,17 @@ function cellValue(d, def){ if(def.type==='cat') return (d.cat||{})[def.id]; if(
 function setCellValue(d, def, v){ if(def.type==='cat') d.cat[def.id] = v; else if(def.type==='week'){ if(!d.week[def.id]) d.week[def.id] = ['','','','','']; d.week[def.id][def.week] = v; } else d[def.type] = v; }
 function gridHead(cls, wc, parshiot, editable){
   const catS = cls.subjects.filter(s=>s.kind==='cat'), weekS = cls.subjects.filter(s=>s.kind==='week');
-  let g = `<tr class="grp"><th rowspan="2">תלמיד</th><th colspan="3">נוכחות</th>`;
-  if(catS.length) g += `<th colspan="${catS.length}">ניקוד (1–10)</th>`;
+  let g = `<tr class="grp"><th rowspan="2">תלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
+  if(catS.length) g += `<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`;
   for(let w=0; w<wc; w++){
     if(!weekS.length) continue;
     let ctl = '';
     if(editable && w===wc-1 && wc<5) ctl = `<button type="button" class="wk-btn" data-wk="add" data-tip="Add week 5">+</button>`;
     if(editable && w===4) ctl = `<button type="button" class="wk-btn" data-wk="remove" data-tip="Remove week 5">×</button>`;
-    g += `<th colspan="${weekS.length}" class="wkh"><div class="wk">שבוע ${w+1} ${ctl}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parshiot[w]||'')}"></th>`;
+    g += `<th colspan="${weekS.length}" class="wkh gs"><div class="wk">שבוע ${w+1} ${ctl}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parshiot[w]||'')}"></th>`;
   }
-  g += '</tr><tr><th>חסר</th><th>איחור</th><th>יצא מוקדם</th>' + catS.map(s=>`<th>${esc(s.label)}</th>`).join('');
-  for(let w=0; w<wc; w++) g += weekS.map(s=>`<th>${esc(s.label)}</th>`).join('');
+  const defs = buildColumnDefs(cls, wc), gs = groupStarts(defs);
+  g += '</tr><tr>' + defs.map((d,i)=>`<th class="${gs[i]?'gs':''}">${esc(d.he)}</th>`).join('');
   return g + '</tr>';
 }
 function renderScores(){
@@ -342,13 +380,13 @@ function renderScores(){
 function renderScoresGrid(){
   const box = $('scGrid'), cls = classById(scoreClassId), month = monthById(scoreMonthId);
   if(!cls || !month){ box.innerHTML = `<div class="empty">${st.classes.length?'Pick a class and month':'Add a class first in Settings → Classes &amp; Staff'}</div>`; return; }
-  const rec = getGradeRecord(cls.id, month.id), wc = rec.weekCount, defs = buildColumnDefs(cls, wc), students = studentsOf(cls.id);
+  const rec = getGradeRecord(cls.id, month.id), wc = rec.weekCount, defs = buildColumnDefs(cls, wc), students = sortedStudents(cls.id), gs = groupStarts(defs);
   const label = enName(cls)+' · '+month.label;
   box.innerHTML = `<div class="grid-wrap" dir="rtl"><table class="entry rtl"><thead>${gridHead(cls, wc, rec.parshiot, true)}</thead><tbody>${
     students.length ? students.map((s,r)=>{
       if(!rec.perStudent[s.id]) rec.perStudent[s.id] = emptyStudentRecord(cls);
       const d = ensureRecordShape(rec.perStudent[s.id], cls);
-      return `<tr><td class="name">${esc(heName(s))}</td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}"></td>`; }).join('') + '</tr>';
+      return `<tr><td class="name">${esc(heName(s))}</td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}"></td>`; }).join('') + '</tr>';
     }).join('') : `<tr><td colspan="${defs.length+1}"><div class="empty">No students in this class</div></td></tr>`
   }</tbody></table></div>`;
   box.querySelectorAll('.parsha').forEach(inp=> inp.addEventListener('input', ()=>{ rec.parshiot[+inp.dataset.idx] = inp.value; saveAll('Scores', label); }));

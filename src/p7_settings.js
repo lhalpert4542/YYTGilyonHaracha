@@ -15,10 +15,10 @@ function renderSettings(){
 function renderYearTab(){
   const box = $('stBody'), last = schoolYears().slice(-1)[0] || st.currentYear, next = hebYearStr(yearNum(last)+1);
   box.innerHTML = `<div class="card"><div class="card-head"><h2>Current school year</h2><select id="yearSel" dir="rtl">${options(schoolYears(), y=>y, y=>y, st.currentYear)}</select><span class="sp"></span><button class="btn" id="newYear">Start ${esc(next)}</button></div>
-    <table class="t"><thead><tr><th>Month</th><th>Classes with scores</th><th>Assessments</th><th>Reports approved</th></tr></thead><tbody>${sortedMonths().map(m=>{
+    <table class="t"><thead><tr><th>Month</th><th>Classes with scores</th><th>Assessments</th><th>Scanned</th></tr></thead><tbody>${sortedMonths().map(m=>{
       const cl = st.classes.filter(c=>studentsOf(c.id).length);
-      const sc = cl.filter(c=>monthHasScores(c.id, m.id)).length, sh = cl.filter(c=>st.sheets[gradeKey(c.id,m.id)]).length, ap = cl.filter(c=>reportState(c, m.id)==='approved').length;
-      return `<tr><td>${he(m.label)}</td><td>${sc}/${cl.length}</td><td>${sh}/${cl.length}</td><td>${ap}/${cl.length}</td></tr>`; }).join('')}</tbody></table></div>`;
+      const sc = cl.filter(c=>monthHasScores(c.id, m.id)).length, sh = cl.filter(c=>st.sheets[gradeKey(c.id,m.id)]).length, sn = cl.filter(c=>sheetState(c, m.id)==='scanned').length;
+      return `<tr><td>${he(m.label)}</td><td>${sc}/${cl.length}</td><td>${sh}/${cl.length}</td><td>${sn}/${cl.length}</td></tr>`; }).join('')}</tbody></table></div>`;
   $('yearSel').onchange = e=>{ st.currentYear = e.target.value; saveAll('School year', st.currentYear); renderYearTab(); };
   $('newYear').onclick = async ()=>{
     if(!await askConfirm('Start school year '+next+'?', 'Classes, staff and students stay. Dashboard, scores, assessments and reports switch to '+next+'.', 'Start', '')) return;
@@ -396,8 +396,6 @@ function buildSampleData(){
         });
       });
       if(mn==='תשרי'){ st.sheets[gradeKey(cls.id, m.id)] = {code:newCode(), at:Date.now(), layout:sheetLayout(cls, m.id), sig:'', scannedAt:Date.now()}; st.sheets[gradeKey(cls.id, m.id)].sig = layoutSig(st.sheets[gradeKey(cls.id, m.id)].layout); }
-      if(mn==='אלול') st.reportStatus[gradeKey(cls.id, m.id)] = {status:'approved', at:Date.now(), sig:classMonthSig(cls, m.id)};
-      if(mn==='תשרי' && p.heN==='א') st.reportStatus[gradeKey(cls.id, m.id)] = {status:'sent', at:Date.now()};
     });
   });
 }

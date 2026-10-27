@@ -442,3 +442,13 @@ $('signOutBtn').addEventListener('click', ()=>{
   persistChain.then(()=>location.reload());
 });
 window.addEventListener('beforeunload', ()=>{ if(flushTimer) flushNow(); });
+
+/* ---------- students sorted by last name (Hebrew name, else English) ---------- */
+function lastKey(s){
+  const split = t => String(t||'').trim().split(/\s+/).filter(Boolean);
+  const h = split(s.nameHe), e = split(s.name);
+  if(h.length) return (h.length>1 ? h[h.length-1]+' '+h.slice(0,-1).join(' ') : h[0]);
+  return e.length>1 ? e[e.length-1]+' '+e.slice(0,-1).join(' ') : (e[0]||'');
+}
+const byLast = (a,b) => lastKey(a).localeCompare(lastKey(b), 'he');
+function sortedStudents(classId){ return studentsOf(classId).slice().sort(byLast); }
