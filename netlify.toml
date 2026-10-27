@@ -1,6 +1,8 @@
 [build]
-  command = "node scripts/build-config.mjs"
-  publish = "dist"
+  publish = "public"
+  command = ""
 
-[build.environment]
-  NODE_VERSION = "22"
+[[headers]]
+  for = "/config.js"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"

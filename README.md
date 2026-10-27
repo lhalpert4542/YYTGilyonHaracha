@@ -3,15 +3,8 @@
 Monthly evaluations, scanned assessment sheets and Hebrew report cards.
 
 - **GitHub:** this repo. `public/index.html` is the whole app; `src/` holds its pieces (`python3 src/build.py` rebuilds it).
-- **Netlify:** builds with `node scripts/build-config.mjs` and publishes `dist/`. The build writes `config.js` from the site's environment variables, so no keys are stored in Git.
+- **Netlify:** publishes `public/` (no build step). `public/config.js` holds the Supabase address and publishable key (safe to be public; the database rules control access).
 - **Supabase:** project **YYT Gilyon Haarachah** (YYT organization, Free plan). Sign-in with Supabase Auth; data in `gilyon_state`, users in `gilyon_users`, letterhead in `gilyon_assets`, AI key in `gilyon_secrets`, audit log in `gilyon_audit`. Setup SQL: `supabase/gilyon-schema.sql`.
-
-## Netlify environment variables
-
-| Variable | Value |
-|---|---|
-| `SUPABASE_URL` | `https://yyqvoycyvffderzngszm.supabase.co` |
-| `SUPABASE_PUBLISHABLE_KEY` | the project's publishable key |
 
 ## Users
 
