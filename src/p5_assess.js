@@ -17,7 +17,7 @@ function printHtml(title, headHtml, bodyHtml, extraScript){
   document.body.appendChild(f);
   const d = f.contentDocument;
   d.open();
-  d.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title>${headHtml}</head><body>${bodyHtml}<script>${extraScript||''}<\/script></body></html>`);
+  d.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title><style>*,*::before,*::after{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;}</style>${headHtml}</head><body>${bodyHtml}<script>${extraScript||''}<\/script></body></html>`);
   d.close();
   const go = ()=>{
     const w = f.contentWindow;
@@ -145,8 +145,8 @@ function qrImg(text){
 }
 const SHEET_CSS = `
 .sheet{width:11in; height:8.5in; position:relative; padding:.38in .45in .32in; box-sizing:border-box; direction:rtl; overflow:hidden; background:#fff; color:#123038; font-family:Arial,'Heebo',sans-serif;}
-.sheet .corner{position:absolute; width:.2in; height:.2in; background:#000;}
-.sheet .corner.tl{top:.12in; left:.12in;} .sheet .corner.tr{top:.12in; right:.12in;} .sheet .corner.bl{bottom:.12in; left:.12in;} .sheet .corner.br{bottom:.12in; right:.12in;}
+.sheet .corner{position:absolute; width:0; height:0; border:.085in solid #000; box-sizing:content-box;}
+.sheet .corner.tl{top:.2in; left:.2in;} .sheet .corner.tr{top:.2in; right:.2in;} .sheet .corner.bl{bottom:.2in; left:.2in;} .sheet .corner.br{bottom:.2in; right:.2in;}
 .sheet .sh-head{display:flex; align-items:center; gap:.18in; padding-bottom:.08in; border-bottom:3px solid #d5aa4e; margin-bottom:.12in; height:1in;}
 .sheet .sh-logo{height:.82in; width:auto; background:#0b4856; border-radius:8px; padding:4px 8px;}
 .sheet .sh-titles{flex:1;}
@@ -175,12 +175,12 @@ const SHEET_PRINT_HEAD = `<style>${SHEET_CSS} @page{size:letter landscape; margi
 const colGroup = c => c.type==='cat' ? 'cat' : c.type==='week' ? 'w'+c.week : 'att';
 const groupStarts = cols => cols.map((c,i)=> i===0 || colGroup(c)!==colGroup(cols[i-1]));
 // fill: {rec} prints the saved scores and parsha names (copy for the teacher to review)
-function sheetHtml(sh, monthLabel, fill){
+function sheetHtml(sh, monthLabel, fill, parsh){
   const L = sh.layout, logo = $('railLogo').src, gs = groupStarts(L.cols);
   const catCols = L.cols.filter(c=>c.type==='cat'), weekCols = L.cols.filter(c=>c.type==='week' && c.week===0);
   const n = Math.max(1, L.rows.length);
   const rowH = Math.min(0.46, 5.55/n), fs = rowH < 0.2 ? 11 : rowH < 0.26 ? 12.5 : 14;
-  const rec = fill && fill.rec, par = rec ? rec.parshiot : [];
+  const rec = fill && fill.rec, par = parsh || (rec ? rec.parshiot : []);
   let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
   if(catCols.length) g += `<th colspan="${catCols.length}" class="gs">ציונים חודשיים (1–10)</th>`;
   for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">פרשה: ${par[w] ? `<b class="pf">${esc(par[w])}</b>` : '<span></span>'}</span></th>`;
@@ -197,8 +197,8 @@ function sheetHtml(sh, monthLabel, fill){
     <div class="sh-foot"><span>ציונים שבועיים 0–100 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים</span><span>ישיבה גדילת תורה</span></div></div>`;
 }
 // filled copy built from today's scores (no QR – not for scanning)
-function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}); }
-function sheetsHtml(keys){ return keys.map(k=>{ const sh = st.sheets[k], m = monthById(k.split('::')[1]); return sh && m ? sheetHtml(sh, m.label) : ''; }).join(''); }
+function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}, parshiotFor(cls.id, monthId)); }
+function sheetsHtml(keys){ return keys.map(k=>{ const sh = st.sheets[k], m = monthById(k.split('::')[1]); return sh && m ? sheetHtml(sh, m.label, null, parshiotFor(k.split('::')[0], m.id)) : ''; }).join(''); }
 function sheetDocs(keys){ return keys.filter(k=>st.sheets[k]).map(k=>{ const c = classById(k.split('::')[0]), m = monthById(k.split('::')[1]); return {name: 'גליון הערכה '+heName(c)+' '+(m?m.label:''), label: heName(c), html: sheetsHtml([k])}; }); }
 function printSheets(keys){ const h = sheetsHtml(keys); if(h) printHtml('Assessments', SHEET_PRINT_HEAD, h); }
 function downloadSheets(keys, name){ const docs = sheetDocs(keys); if(docs.length) askPdf(docs, {name, title:'Making assessment PDF', unit:'classes', css:SHEET_CSS, landscape:true, selector:'.sheet'}); }
@@ -236,7 +236,20 @@ function renderAssessments(){
     return `<div class="mcard ${m.id===assessMonthId?'sel':''} ${stale?'stale':''}" data-m="${m.id}"><div class="m">${esc(m.label)}</div><div class="s">${sub}</div><div class="acts">${classes.length ? sheetActs('data-mact', state) : ''}</div></div>`;
   }).join('');
   const month = monthById(assessMonthId);
-  const detail = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>
+  let parRow = '';
+  if(month && classes.length){
+    const wc = Math.max(4, ...classes.map(c=>{ const r = recFor(c.id, month.id); return r ? r.weekCount : 4; }));
+    const par = parshiotFor(classes[0].id, month.id), plan = weekPlan(classes[0].id, month), mc = plan.cal, ed = canEdit(), prevM = nearMonth(month, -1);
+    const usedSet = new Set(plan.list), movedSet = new Set(mc.avail.slice(0, plan.dropIn));
+    const shab = mc.all.length ? `<div class="shab-row"><span class="lbl">שבתות</span>${mc.all.map((p,i)=>{
+        const mv = movedSet.has(p), on = usedSet.has(p), off = !mv && !on;
+        const tip = mv ? 'In week 5 of '+prevM.label : mc.skip.includes(i) ? 'Skipped – click to use this week' : off ? 'Not used – add week 5 to use it' : 'Click to skip this week';
+        return `<button type="button" class="shab ${off?'off':''} ${mv?'moved':''}" data-shab="${i}" ${ed?'':'disabled'} data-tip="${esc(tip)}">${mv?'↶ ':on?'✓ ':''}${esc(p)}</button>`; }).join('')}
+      <span class="hint" dir="ltr">Click a Shabbos to skip it · the weeks after it move up</span></div>` : '';
+    const w5 = ed ? (wc<5 ? `<button type="button" class="btn sec sm" data-w5="add">+ שבוע 5</button>` : `<button type="button" class="btn sec sm" data-w5="remove">× שבוע 5</button>`) : '';
+    parRow = `<div class="par-set" dir="rtl">${shab}<div class="wk-row"><span class="lbl">פרשיות</span>${Array.from({length:wc}, (_,w)=>`<label><span>שבוע ${w+1}</span><input type="text" class="parsha-all" data-idx="${w}" dir="rtl" value="${esc(par[w]||'')}" ${ed?'':'readonly'}></label>`).join('')}${w5}<span class="hint" dir="ltr">Edit any week · all classes</span></div></div>`;
+  }
+  const detail = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${parRow}
     ${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students</th><th>Sheet</th><th></th></tr></thead><tbody>${classes.map(c=>{
       const s = sheetState(c, month.id), sh = st.sheets[gradeKey(c.id, month.id)];
       return `<tr data-cid="${esc(c.id)}"><td>${esc(enName(c))} ${c.nameHe?`<span class="muted">· ${he(c.nameHe)}</span>`:''}</td><td>${he(heName(teacherOf(c)))}</td><td>${studentsOf(c.id).length}</td>
@@ -245,6 +258,43 @@ function renderAssessments(){
   P.innerHTML = pageHead('Assessments', `<button class="btn" id="scanBtn">${ICON.scan}Scan sheets</button>`) +
     `<div id="scanArea"></div><div class="month-cards">${cards}</div>${detail}`;
   $('scanBtn').addEventListener('click', ()=>{ if(!aiKey()){ noKeyNotice(); return; } $('scanFileInput').click(); });
+  P.querySelectorAll('.parsha-all').forEach(inp=> inp.addEventListener('input', ()=>{
+    if(!canEdit()) return;
+    const i = +inp.dataset.idx, v = inp.value.trim();
+    sheetClasses().forEach(c=>{ const cal = weekParshiot(c.id, month)[i] || ''; getGradeRecord(c.id, month.id).parshiot[i] = v===cal ? '' : v; });
+    saveAll('Parshiot', month.label);
+  }));
+  // weeks that only had the calendar parsha follow the new order; typed-in ones stay
+  const setSkip = skip => { month.skip = skip.slice().sort((a,c)=>a-c); };
+  // typed-in weeks that only repeat the calendar are cleared, so they follow the new order (this month and the next)
+  const freeTyped = () => [month, nearMonth(month, 1)].filter(Boolean).forEach(m=> sheetClasses().forEach(c=>{
+    const r = recFor(c.id, m.id); if(!r) return; const cal = weekParshiot(c.id, m); r.parshiot = r.parshiot.map((p,k)=> p===cal[k] ? '' : p); }));
+  // sheets not scanned yet follow the new week count (same code); scanned ones show "Changed since generated"
+  const setWeeks = n => sheetClasses().forEach(c=>{
+    getGradeRecord(c.id, month.id).weekCount = n;
+    const sh = st.sheets[gradeKey(c.id, month.id)];
+    if(sh && !sh.scannedAt){ sh.layout = sheetLayout(c, month.id); sh.sig = layoutSig(sh.layout); }
+  });
+  P.querySelectorAll('[data-shab]').forEach(b=> b.addEventListener('click', ()=>{
+    if(!canEdit()) return;
+    const c0 = sheetClasses()[0], plan = weekPlan(c0.id, month), i = +b.dataset.shab, name = plan.cal.all[i];
+    if(plan.cal.avail.slice(0, plan.dropIn).includes(name)){ toast('This Shabbos is week 5 of '+nearMonth(month,-1).label); return; }
+    freeTyped();
+    const skip = plan.cal.skip.slice(), used = plan.list.includes(name);
+    let act;
+    if(skip.includes(i)){ skip.splice(skip.indexOf(i), 1); act = 'Add Shabbos'; }
+    else if(used){ skip.push(i); act = 'Skip Shabbos'; }
+    else { setWeeks(5); act = 'Add week 5'; }      // the 5th Shabbos, not used yet
+    if(act!=='Add week 5'){ setSkip(skip); const left = monthCal(month).avail.length - plan.dropIn; setWeeks(left>4 ? 5 : 4); }
+    saveAll(act, month.label + ' · ' + name); renderAssessments();
+  }));
+  P.querySelectorAll('[data-w5]').forEach(b=> b.addEventListener('click', ()=>{
+    if(!canEdit()) return;
+    freeTyped();
+    const add = b.dataset.w5==='add';
+    setWeeks(add ? 5 : 4);
+    saveAll(add ? 'Add week 5' : 'Remove week 5', month.label); renderAssessments();
+  }));
   P.querySelectorAll('.mcard').forEach(card=> card.addEventListener('click', e=>{ if(e.target.closest('button')) return; assessMonthId = card.dataset.m; renderAssessments(); }));
   P.querySelectorAll('[data-mact]').forEach(b=> b.addEventListener('click', async e=>{
     e.stopPropagation();
@@ -493,7 +543,7 @@ function renderScanArea(){
     else {
       const L = sh.layout, rows = L.rows.slice((pg.page-1)*ROWS_PER_PAGE, pg.page*ROWS_PER_PAGE), gsR = groupStarts(L.cols);
       const rec = recFor(cls.id, month.id);
-      const parsh = []; for(let w=0; w<L.weekCount; w++) parsh[w] = (pg.parsha && pg.parsha[w]) || (rec && rec.parshiot[w]) || '';
+      const parsh = []; for(let w=0; w<L.weekCount; w++) parsh[w] = parshiotFor(cls.id, month.id)[w] || '';
       const problems = pageProblems(pg);
       detail = `${pg.status==='saved'?'<div class="notice">Saved to scores. You can still edit them on the Scores page.</div>':''}
         <div class="review"><div class="img" id="scanImg"><img src="${pg.img}" alt=""></div>
@@ -539,13 +589,12 @@ function renderScanArea(){
     const td = inp.parentElement, col = st.sheets[pg.key].layout.cols[ci];
     td.classList.remove('unsure'); td.removeAttribute('data-tip'); td.classList.toggle('bad', !validCell(col, v));
   }));
-  box.querySelectorAll('thead .parsha').forEach(inp=> inp.addEventListener('input', ()=>{ (pg.parsha = pg.parsha||{})[+inp.dataset.idx] = inp.value.trim(); }));
   box.querySelectorAll('tbody input').forEach(inp=> inp.addEventListener('blur', ()=>{ const chip = box.querySelector(`.scan-chip[data-pid="${pg.id}"]`); if(chip) chip.innerHTML = `<span class="d ${chipDot(pg)}"></span>${pageTitleHtml(pg)}${pageProblems(pg)?' · '+pageProblems(pg):''}`; }));
 }
 function reviewHead(L, parsh){
   const catCols = L.cols.filter(c=>c.type==='cat'), weekCols = L.cols.filter(c=>c.type==='week' && c.week===0);
   let g = `<tr class="grp"><th rowspan="2">תלמיד</th><th colspan="3" class="gs">נוכחות</th>${catCols.length?`<th colspan="${catCols.length}" class="gs">ניקוד (1–10)</th>`:''}`;
-  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wkh gs"><div class="wk">שבוע ${w+1}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parsh[w]||'')}"></th>`;
+  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wkh gs"><div class="wk">שבוע ${w+1}</div><div class="parsha-ro">${esc(parsh[w]||'—')}</div></th>`;
   g += '</tr><tr>' + L.cols.map((c,i,a)=>`<th class="${i===0||colGroup(c)!==colGroup(a[i-1])?'gs':''}">${esc(c.he)}</th>`).join('');
   return g + '</tr>';
 }
@@ -565,7 +614,6 @@ function saveScanPage(pg, quiet){
       if(col.type==='week' && col.week===4) rec.weekCount = 5;
     });
   });
-  Object.entries(pg.parsha||{}).forEach(([w, t])=>{ if(t) rec.parshiot[+w] = t; });
   sh.scannedAt = Date.now();
   pg.status = 'saved';
   saveAll('Scan saved', pageTitle(pg));

@@ -27,7 +27,7 @@ function reportPageHtml(cls, month, s, rec, opt){
   ensureClassShape(cls);
   const wc = rec ? rec.weekCount : 4;
   const d = ensureRecordShape(rec && rec.perStudent[s.id] ? clone(rec.perStudent[s.id]) : emptyStudentRecord(cls), cls);
-  const par = rec ? rec.parshiot : [];
+  const par = parshiotFor(cls.id, month ? month.id : ''), typed = rec ? rec.parshiot : [];
   const weekS = cls.subjects.filter(x=>x.kind==='week'), catS = cls.subjects.filter(x=>x.kind==='cat');
   const ctx = {month: month ? month.label : '', student: heName(s), class: heName(cls), teacher: heName(teacherOf(cls))};
   let weekHtml = '';
@@ -35,7 +35,7 @@ function reportPageHtml(cls, month, s, rec, opt){
     let rows = '';
     for(let i=0;i<wc;i++){
       const any = weekS.some(w=> ((d.week[w.id]||[])[i]||'')!=='');
-      if(!par[i] && !any) continue;
+      if(!any && !String(typed[i]||'').trim()) continue;
       rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>`<td>${reportScore((d.week[w.id]||[])[i])}</td>`).join('')}</tr>`;
     }
     if(!rows) rows = `<tr><td colspan="${weekS.length+1}">—</td></tr>`;

@@ -412,7 +412,6 @@ function buildSampleData(){
     months.forEach(m=>{
       const mn = monthName(m.label); if(!PAR[mn]) return;
       const rec = getGradeRecord(cls.id, m.id), weeks = mn==='חשוון' ? 1 : 4, full = weeks===4;
-      PAR[mn].forEach((pp,i)=>{ if(i<weeks) rec.parshiot[i] = pp; });
       kids.forEach(k=>{
         const d = rec.perStudent[k.s.id] = emptyStudentRecord(cls);
         d.chesarim = full ? String(Math.floor(R()*(2+k.absent))) : '';

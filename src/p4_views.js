@@ -144,7 +144,7 @@ function renderProfile(){
     return {m, rec, d, avg: studentOverallAvg(d, cls, rec.weekCount), wAvg};
   });
   const T = st.dashboardThresholds, tone = v => v===null ? '' : v < T.low ? 'bad-cell' : v >= T.high ? 'good-cell' : '';
-  const trend = rows.length ? `<div class="trend">${rows.map(r=>{ const v = r.avg===null ? 0 : Math.round(r.avg); return `<div class="tb"><div class="bar-wrap"><div class="bar ${v<T.low?'b':v>=T.high?'g':''}" style="height:${Math.max(4,v)}%"></div></div><b>${r.avg===null?'—':v}</b><span class="he">${esc(monthName(r.m.label))}</span></div>`; }).join('')}</div>` : '<div class="empty">No scores yet</div>';
+  const trend = rows.length ? `<div class="trend">${rows.map(r=>{ const v = r.avg===null ? 0 : Math.round(r.avg); return `<div class="tb"><div class="bar-wrap"><div class="bar ${v<T.low?'b':v>=T.high?'g':''}" style="height:${Math.max(4,v)}%"></div></div><b>${r.avg===null?'—':v}</b><span class="he">${esc(monthShort(r.m.label))}</span></div>`; }).join('')}</div>` : '<div class="empty">No scores yet</div>';
   const head = `<tr class="grp"><th rowspan="2">חודש</th><th colspan="3" class="gs">נוכחות</th>${catS.length?`<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`:''}${weekS.length?`<th colspan="${weekS.length}" class="gs">ממוצע שבועי</th>`:''}<th rowspan="2" class="gs">ממוצע</th></tr>
     <tr><th class="gs">חסר</th><th>איחור</th><th>יצא מוקדם</th>${catS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}${weekS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}</tr>`;
   const body = rows.map(r=>`<tr class="click" data-m="${r.m.id}"><td class="name">${esc(r.m.label)}</td><td class="gs">${esc(r.d.chesarim)}</td><td>${esc(r.d.ichurim)}</td><td>${esc(r.d.yatza)}</td>
@@ -368,10 +368,7 @@ function gridHead(cls, wc, parshiot, editable){
   if(catS.length) g += `<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`;
   for(let w=0; w<wc; w++){
     if(!weekS.length) continue;
-    let ctl = '';
-    if(editable && w===wc-1 && wc<5) ctl = `<button type="button" class="wk-btn" data-wk="add" data-tip="Add week 5">+</button>`;
-    if(editable && w===4) ctl = `<button type="button" class="wk-btn" data-wk="remove" data-tip="Remove week 5">×</button>`;
-    g += `<th colspan="${weekS.length}" class="wkh gs"><div class="wk">שבוע ${w+1} ${ctl}</div><input type="text" class="parsha" data-idx="${w}" dir="rtl" placeholder="פרשה" value="${esc(parshiot[w]||'')}"></th>`;
+    g += `<th colspan="${weekS.length}" class="wkh gs"><div class="wk">שבוע ${w+1}</div><div class="parsha-ro" data-tip="Set in Assessments">${esc(parshiot[w]||'—')}</div></th>`;
   }
   const defs = buildColumnDefs(cls, wc), gs = groupStarts(defs);
   g += '</tr><tr>' + defs.map((d,i)=>`<th class="${gs[i]?'gs':''}">${esc(d.he)}</th>`).join('');
@@ -398,16 +395,14 @@ function renderScoresGrid(){
   const rec = getGradeRecord(cls.id, month.id), wc = rec.weekCount, defs = buildColumnDefs(cls, wc), students = sortedStudents(cls.id), gs = groupStarts(defs);
   const label = enName(cls)+' · '+month.label;
   const ro = !canEdit();
-  box.innerHTML = `${ro?'<div class="notice">View only</div>':''}<div class="grid-wrap" dir="rtl"><table class="entry rtl ${ro?'ro':''}"><thead>${gridHead(cls, wc, rec.parshiot, !ro)}</thead><tbody>${
+  box.innerHTML = `${ro?'<div class="notice">View only</div>':''}<div class="grid-wrap" dir="rtl"><table class="entry rtl ${ro?'ro':''}"><thead>${gridHead(cls, wc, parshiotFor(cls.id, month.id), !ro)}</thead><tbody>${
     students.length ? students.map((s,r)=>{
       if(!rec.perStudent[s.id]) rec.perStudent[s.id] = emptyStudentRecord(cls);
       const d = ensureRecordShape(rec.perStudent[s.id], cls);
       return `<tr><td class="name">${esc(heName(s))}</td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}" ${ro?'readonly tabindex="-1"':''}></td>`; }).join('') + '</tr>';
     }).join('') : `<tr><td colspan="${defs.length+1}"><div class="empty">No students in this class</div></td></tr>`
   }</tbody></table></div>`;
-  if(ro){ box.querySelectorAll('.parsha').forEach(i=>{ i.readOnly = true; i.tabIndex = -1; }); return; }
-  box.querySelectorAll('.parsha').forEach(inp=> inp.addEventListener('input', ()=>{ rec.parshiot[+inp.dataset.idx] = inp.value; saveAll('Scores', label); }));
-  box.querySelectorAll('.wk-btn').forEach(b=> b.addEventListener('click', ()=>{ rec.weekCount = b.dataset.wk==='add' ? 5 : 4; saveAll(rec.weekCount===5?'Add week 5':'Remove week 5', label); renderScoresGrid(); }));
+  if(ro) return;
   const inputs = Array.from(box.querySelectorAll('tbody input'));
   inputs.forEach(inp=>{
     inp.addEventListener('input', ()=>{

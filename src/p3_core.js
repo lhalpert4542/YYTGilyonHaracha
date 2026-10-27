@@ -134,10 +134,14 @@ function monthName(label){ const first = String(label||'').trim().split(/\s+/)[0
 function monthSchoolYear(label){
   const parts = String(label||'').trim().split(/\s+/);
   if(parts.length < 2) return null;
-  const y = parseHebYear(parts[1]); if(!y) return null;
+  const y = parseHebYear(parts[parts.length-1]); if(!y) return null;
   return hebYearStr(monthName(label)==='אלול' ? y+1 : y);
 }
-function monthOrder(m){ const i = HEB_MONTHS.indexOf(monthName(m.label)); return i===-1 ? 100 : i; }
+// "אדר א" / "אדר ב" in a leap year
+const adarPart = label => { const p = String(label||'').trim().split(/\s+/); return monthName(label)==='אדר' && p.length>2 ? (/^ב/.test(p[1]) ? 2 : /^א/.test(p[1]) ? 1 : 0) : 0; };
+const monthShort = label => { const p = String(label||'').trim().split(/\s+/); return p.length>1 ? p.slice(0,-1).join(' ') : p[0] || ''; };
+const isLeapYear = n => ((7*n + 1) % 19) < 7;
+function monthOrder(m){ const i = HEB_MONTHS.indexOf(monthName(m.label)); return i===-1 ? 100 : i + (adarPart(m.label)===2 ? .5 : 0); }
 function yearNum(y){ return parseHebYear(y) || 0; }
 function monthsOfYear(y){ return st.months.filter(m=>m.year===y).sort((a,b)=> monthOrder(a)-monthOrder(b) || st.months.indexOf(a)-st.months.indexOf(b)); }
 function sortedMonths(){ return monthsOfYear(st.currentYear); }
@@ -148,7 +152,18 @@ function addMonth(label, year){
   if(!m){ m = {id:uid(), label, year: year || monthSchoolYear(label) || st.currentYear}; st.months.push(m); }
   return m;
 }
-function ensureYearMonths(y){ const n = yearNum(y); if(!n) return; HEB_MONTHS.forEach(mn=> addMonth(mn+' '+hebYearStr(mn==='אלול' ? n-1 : n), y)); }
+function ensureYearMonths(y){
+  const n = yearNum(y); if(!n) return;
+  HEB_MONTHS.forEach(mn=>{
+    const ys = hebYearStr(mn==='אלול' ? n-1 : n);
+    if(mn==='אדר' && isLeapYear(n)){
+      // leap year: two months. A plain "אדר" becomes אדר א (its scores stay with it).
+      const plain = st.months.find(m=>m.label==='אדר '+ys);
+      if(plain && !st.months.some(m=>m.label==='אדר א '+ys)) plain.label = 'אדר א '+ys;
+      addMonth('אדר א '+ys, y); addMonth('אדר ב '+ys, y);
+    } else addMonth(mn+' '+ys, y);
+  });
+}
 const monthById = id => st.months.find(m=>m.id===id);
 
 /* ---------------- shape / migration ---------------- */
@@ -191,6 +206,64 @@ function getGradeRecord(classId, monthId){
   return ensureGradeRec(st.grades[key]);
 }
 function recFor(classId, monthId){ const r = st.grades[gradeKey(classId, monthId)]; return r ? ensureGradeRec(r) : null; }
+
+/* ---------------- Parshiot (auto-filled from the calendar, outside Eretz Yisroel) ----------------
+   Shabbos parshiot per Hebrew month, 5786–5800. Yom Tov Shabbosim are skipped. */
+const PARSHA_CAL = {786:'תשרי=וילך,האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה|כסלו=תולדות,ויצא,וישלח,וישב,מקץ|טבת=ויגש,ויחי,שמות,וארא|שבט=בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי,במדבר|סיון=נשא,בהעלותך,שלח לך|תמוז=קרח,חקת־בלק,פנחס,מטות־מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+787:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה|כסלו=תולדות,ויצא,וישלח,וישב|טבת=מקץ,ויגש,ויחי,שמות|שבט=וארא,בא,בשלח,יתרו,משפטים|אדר א=תרומה,תצוה,כי תשא,ויקהל|אדר ב=פקודי,ויקרא,צו,שמיני|ניסן=תזריע,מצורע,אחרי מות|אייר=קדשים,אמור,בהר,בחוקותי,במדבר|סיון=נשא,בהעלותך,שלח לך|תמוז=קרח,חקת־בלק,פנחס,מטות־מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+788:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה|כסלו=תולדות,ויצא,וישלח,וישב|טבת=מקץ,ויגש,ויחי,שמות|שבט=וארא,בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי|סיון=במדבר,נשא,בהעלותך,שלח לך,קרח|תמוז=חקת,בלק,פנחס,מטות־מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+789:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה,תולדות|כסלו=ויצא,וישלח,וישב,מקץ|טבת=ויגש,ויחי,שמות,וארא|שבט=בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי|סיון=במדבר,נשא,בהעלותך,שלח לך|תמוז=קרח,חקת,בלק,פנחס|אב=מטות־מסעי,דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים',
+790:'תשרי=וילך,האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה|כסלו=תולדות,ויצא,וישלח,וישב|טבת=מקץ,ויגש,ויחי,שמות|שבט=וארא,בא,בשלח,יתרו,משפטים|אדר א=תרומה,תצוה,כי תשא,ויקהל|אדר ב=פקודי,ויקרא,צו,שמיני|ניסן=תזריע,מצורע,אחרי מות|אייר=קדשים,אמור,בהר,בחוקותי,במדבר|סיון=נשא,בהעלותך,שלח לך|תמוז=קרח,חקת־בלק,פנחס,מטות־מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+791:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה|כסלו=תולדות,ויצא,וישלח,וישב|טבת=מקץ,ויגש,ויחי,שמות|שבט=וארא,בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי|סיון=במדבר,נשא,בהעלותך,שלח לך,קרח|תמוז=חקת,בלק,פנחס,מטות־מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+792:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה,תולדות|כסלו=ויצא,וישלח,וישב,מקץ|טבת=ויגש,ויחי,שמות,וארא|שבט=בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי|סיון=במדבר,נשא,בהעלותך,שלח לך|תמוז=קרח,חקת,בלק,פנחס|אב=מטות־מסעי,דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים',
+793:'תשרי=וילך,האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה|כסלו=תולדות,ויצא,וישלח,וישב|טבת=מקץ,ויגש,ויחי,שמות|שבט=וארא,בא,בשלח,יתרו,משפטים|אדר א=תרומה,תצוה,כי תשא,ויקהל|אדר ב=פקודי,ויקרא,צו,שמיני|ניסן=תזריע,מצורע,אחרי מות|אייר=קדשים,אמור,בהר,בחוקותי,במדבר|סיון=נשא,בהעלותך,שלח לך|תמוז=קרח,חקת־בלק,פנחס,מטות־מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+794:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה|כסלו=תולדות,ויצא,וישלח,וישב|טבת=מקץ,ויגש,ויחי,שמות|שבט=וארא,בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי|סיון=במדבר,נשא,בהעלותך,שלח לך,קרח|תמוז=חקת,בלק,פנחס,מטות־מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+795:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה,תולדות|כסלו=ויצא,וישלח,וישב,מקץ|טבת=ויגש,ויחי,שמות,וארא|שבט=בא,בשלח,יתרו,משפטים|אדר א=תרומה,תצוה,כי תשא,ויקהל,פקודי|אדר ב=ויקרא,צו,שמיני,תזריע|ניסן=מצורע,אחרי מות,קדשים|אייר=אמור,בהר,בחוקותי,במדבר|סיון=נשא,בהעלותך,שלח לך,קרח,חקת|תמוז=בלק,פנחס,מטות,מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+796:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה,תולדות|כסלו=ויצא,וישלח,וישב,מקץ|טבת=ויגש,ויחי,שמות,וארא|שבט=בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי|סיון=במדבר,נשא,בהעלותך,שלח לך|תמוז=קרח,חקת,בלק,פנחס|אב=מטות־מסעי,דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים',
+797:'תשרי=וילך,האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה|כסלו=תולדות,ויצא,וישלח,וישב|טבת=מקץ,ויגש,ויחי,שמות|שבט=וארא,בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי|סיון=במדבר,נשא,בהעלותך,שלח לך,קרח|תמוז=חקת,בלק,פנחס,מטות־מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+798:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה,תולדות|כסלו=ויצא,וישלח,וישב,מקץ|טבת=ויגש,ויחי,שמות,וארא|שבט=בא,בשלח,יתרו,משפטים|אדר א=תרומה,תצוה,כי תשא,ויקהל,פקודי|אדר ב=ויקרא,צו,שמיני,תזריע|ניסן=מצורע,אחרי מות,קדשים|אייר=אמור,בהר,בחוקותי,במדבר|סיון=נשא,בהעלותך,שלח לך,קרח,חקת|תמוז=בלק,פנחס,מטות,מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך',
+799:'תשרי=האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה,תולדות|כסלו=ויצא,וישלח,וישב,מקץ|טבת=ויגש,ויחי,שמות,וארא|שבט=בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי|סיון=במדבר,נשא,בהעלותך,שלח לך|תמוז=קרח,חקת,בלק,פנחס|אב=מטות־מסעי,דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים',
+800:'תשרי=וילך,האזינו,בראשית|חשוון=נח,לך לך,וירא,חיי שרה|כסלו=תולדות,ויצא,וישלח,וישב,מקץ|טבת=ויגש,ויחי,שמות,וארא|שבט=בא,בשלח,יתרו,משפטים|אדר=תרומה,תצוה,כי תשא,ויקהל־פקודי|ניסן=ויקרא,צו,שמיני|אייר=תזריע־מצורע,אחרי מות־קדשים,אמור,בהר־בחוקותי,במדבר|סיון=נשא,בהעלותך,שלח לך|תמוז=קרח,חקת־בלק,פנחס,מטות־מסעי|אב=דברים,ואתחנן,עקב,ראה|אלול=שופטים,כי תצא,כי תבוא,נצבים־וילך'};
+const parCache = {};
+function calParshiot(label){
+  const parts = String(label||'').trim().split(/\s+/), y = parseHebYear(parts[parts.length-1]);
+  if(!y || !PARSHA_CAL[y-5000]) return [];
+  const map = parCache[y] || (parCache[y] = Object.fromEntries(PARSHA_CAL[y-5000].split('|').map(x=>{ const [m, a] = x.split('='); return [m, a.split(',')]; })));
+  let mn = monthName(label);
+  if(mn==='אדר'){ const t = parts.slice(1).join(' '); mn = /^(א|א׳|א'|ראשון)(\s|$)/.test(t) ? 'אדר א' : /^(ב|ב׳|ב'|שני)(\s|$)/.test(t) ? 'אדר ב' : (map['אדר'] ? 'אדר' : 'אדר ב'); }
+  return (map[mn] || []).slice(0, 5);
+}
+// the parsha of each week: what was typed in, otherwise the calendar
+// the Shabbosim of a month (calendar). m.skip = the ones the user left out.
+function monthCal(m){
+  const all = m ? calParshiot(m.label) : [];
+  const explicit = !!(m && Array.isArray(m.skip)), skip = explicit ? m.skip : [];
+  return {all, skip, explicit, avail: all.filter((_,i)=>!skip.includes(i))};
+}
+/* Weeks run on from month to month:
+   - a month normally shows its own Shabbosim (a 5th Shabbos shows only when week 5 is added)
+   - adding week 5 to a 4-Shabbos month takes the next month's first parsha, and that month starts one later
+     (and fills up from the month after it, and so on, until a month with a spare Shabbos)
+   - skipping a Shabbos moves the weeks after it up, filling up from the next month the same way */
+function nearMonth(m, d){ if(!m) return null; const list = monthsOfYear(m.year), i = list.indexOf(m); return i<0 ? null : list[i+d] || null; }
+const wcOf = (classId, m) => { const r = m && recFor(classId, m.id); return r ? r.weekCount : 4; };
+function weekPlan(classId, m, depth){
+  const empty = {list:[], dropIn:0, pull:0, cal:monthCal(m)};
+  if(!m || (depth||0) > 20) return empty;
+  const cal = monthCal(m), prev = nearMonth(m, -1), next = nearMonth(m, 1), wc = wcOf(classId, m);
+  const dropIn = prev ? weekPlan(classId, prev, (depth||0)+1).pull : 0;
+  const base = cal.avail.slice(dropIn);
+  const need = wc - base.length;
+  const nextAvail = next ? monthCal(next).avail : [];
+  const pull = need>0 && (dropIn>0 || cal.skip.length>0 || (wc===5 && base.length===4)) ? Math.min(need, nextAvail.length) : 0;
+  return {list: base.slice(0, wc).concat(nextAvail.slice(0, pull)), dropIn, pull, cal};
+}
+const weekParshiot = (classId, m) => weekPlan(classId, m).list;
+function parshiotFor(classId, monthId){
+  const rec = recFor(classId, monthId), m = monthById(monthId), cal = weekParshiot(classId, m);
+  const out = []; for(let i=0;i<5;i++) out[i] = (rec && String(rec.parshiot[i]||'').trim()) || cal[i] || '';
+  return out;
+}
 
 function migrateLoadedState(){
   st.classes = Array.isArray(st.classes) ? st.classes : [];
