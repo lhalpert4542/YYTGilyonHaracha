@@ -159,7 +159,7 @@ const SHEET_CSS = `
 .sheet table.sh th, .sheet table.sh td{border:1.2px solid #24434a; text-align:center; padding:1px 2px;}
 .sheet table.sh thead tr.g th{background:#0b4856; color:#fff; font-size:12px; font-weight:700; height:.3in;}
 .sheet table.sh thead tr.s th{background:#e6f0f1; color:#0b4856; font-size:11px; font-weight:700; overflow-wrap:anywhere; line-height:1.1; height:.32in;}
-.sheet table.sh th.wk .p{display:block; font-weight:400; font-size:10px; margin-top:2px; color:#d9e8e8; text-align:right; padding-right:3px;}
+.sheet table.sh th.wk .p{display:block; font-weight:400; font-size:10px; margin-top:2px; color:#d9e8e8; text-align:center; padding:0 2px;}
 .sheet table.sh th.wk .p span{display:inline-block; width:62%; border-bottom:1px solid #d5aa4e; height:12px;}
 .sheet table.sh td.nm{text-align:right; padding-right:6px; white-space:nowrap; overflow:hidden; font-weight:600;}
 .sheet table.sh td.no{color:#5a7479; font-size:11px;}
@@ -167,7 +167,7 @@ const SHEET_CSS = `
 .sheet table.sh .gs{border-right:3px solid #0b4856 !important;}
 .sheet table.sh thead tr.g th.gs{border-right-color:#d5aa4e !important;}
 .sheet table.sh td.val{font-size:15px; font-weight:700; color:#0b4856;}
-.sheet .pf{color:#fff; font-size:11px;}
+.sheet .pf{color:#fff; font-size:12px;}
 .sheet .sh-review{border:2px solid #d5aa4e; color:#0b4856; font-weight:700; padding:8px 14px; border-radius:6px; font-size:15px;}
 .sheet .sh-foot{position:absolute; bottom:.3in; left:.45in; right:.45in; font-size:10.5px; color:#5a7479; display:flex; justify-content:space-between;}
 `;
@@ -183,7 +183,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
   const rec = fill && fill.rec, par = parsh || (rec ? rec.parshiot : []);
   let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
   if(catCols.length) g += `<th colspan="${catCols.length}" class="gs">ציונים חודשיים (1–10)</th>`;
-  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">פרשה: ${par[w] ? `<b class="pf">${esc(par[w])}</b>` : '<span></span>'}</span></th>`;
+  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">${par[w] ? `<b class="pf">${esc(par[w])}</b>` : 'פרשה: <span></span>'}</span></th>`;
   let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc(c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he)}</th>`).join('');
   const body = L.rows.map((r,i)=>{
     const d = rec && rec.perStudent[r.sid];
@@ -252,7 +252,7 @@ function renderAssessments(){
   const detail = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${parRow}
     ${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students</th><th>Sheet</th><th></th></tr></thead><tbody>${classes.map(c=>{
       const s = sheetState(c, month.id), sh = st.sheets[gradeKey(c.id, month.id)];
-      return `<tr data-cid="${esc(c.id)}"><td>${esc(enName(c))} ${c.nameHe?`<span class="muted">· ${he(c.nameHe)}</span>`:''}</td><td>${he(heName(teacherOf(c)))}</td><td>${studentsOf(c.id).length}</td>
+      return `<tr data-cid="${esc(c.id)}"><td>${he(heName(c))}</td><td>${he(heName(teacherOf(c)))}</td><td>${studentsOf(c.id).length}</td>
         <td>${STATE_TAG[s]} ${sh?`<span class="muted small" style="font-family:monospace;">${esc(sh.code)}</span>`:''}</td><td class="act">${sheetActs('data-cact', s)}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">Add classes and students first</div>'}</div>` : '';
   P.innerHTML = pageHead('Assessments', `<button class="btn" id="scanBtn">${ICON.scan}Scan sheets</button>`) +

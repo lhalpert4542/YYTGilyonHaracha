@@ -2,7 +2,7 @@
 /* =====================================================================
    Settings – tabs like the Kriah app
    ===================================================================== */
-const SETTINGS_TABS = [['classes','Classes & Staff'],['year','School Year'],['report','Report Setup'],['ai','AI Scanning'],['users','Users'],['data','Backup / Data']];
+const SETTINGS_TABS = [['classes','Classes'],['year','School Year'],['report','Report Setup'],['ai','AI Scanning'],['users','Users'],['data','Backup / Data']];
 let settingsTab = 'classes';
 function renderSettings(){
   const P = $('panel-settings');
@@ -21,65 +21,46 @@ function renderYearTab(){
       return `<tr><td>${he(m.label)}</td><td>${sc}/${cl.length}</td><td>${sh}/${cl.length}</td><td>${sn}/${cl.length}</td></tr>`; }).join('')}</tbody></table></div>`;
   $('yearSel').onchange = e=>{ st.currentYear = e.target.value; saveAll('School year', st.currentYear); renderYearTab(); };
   $('newYear').onclick = async ()=>{
-    if(!await askConfirm('Start school year '+next+'?', 'Classes, staff and students stay. Dashboard, scores, assessments and reports switch to '+next+'.', 'Start', '')) return;
+    if(!await askConfirm('Start school year '+next+'?', 'Classes and students stay. Dashboard, scores, assessments and reports switch to '+next+'.', 'Start', '')) return;
     ensureYearMonths(next); st.currentYear = next; saveAll('Start school year', next); doneWithUndo('School year '+next); renderYearTab();
   };
 }
 
-/* ---------- Classes & Staff (one tab) ---------- */
+/* ---------- Classes (name in Hebrew, teacher typed in) ---------- */
 let csClassId = '';
-const staffLabel = s => (s.nameEn||s.nameHe||'') + (s.nameEn && s.nameHe ? ' · '+s.nameHe : '');
 function renderClassesStaffTab(){
   const box = $('stBody');
   if(!classById(csClassId)) csClassId = st.classes[0] ? st.classes[0].id : '';
   box.innerHTML = `<div class="cs-grid">
     <div class="card"><div class="card-head"><h2>Classes</h2><span class="pill">${st.classes.length}</span></div>
-      <div class="row" style="margin-bottom:12px;"><input type="text" id="ncEn" placeholder="Class (English)" style="flex:1 1 120px;"><input type="text" id="ncHe" dir="rtl" placeholder="כתה" style="flex:1 1 90px;">
-        <select id="ncT" style="flex:1 1 150px;"><option value="">Teacher</option>${options(st.staff, s=>s.id, staffLabel, '')}</select><button class="btn" id="ncAdd">${ICON.plus}Add</button></div>
-      ${st.classes.length ? `<table class="t"><thead><tr><th style="width:22%;">Class</th><th style="width:16%;">Hebrew name</th><th>Teacher</th><th style="width:1%;">Students</th><th style="width:1%;"></th></tr></thead><tbody>${st.classes.map(c=>`<tr data-cid="${esc(c.id)}" class="click ${c.id===csClassId?'sel':''}">
-        <td><input type="text" data-f="name" value="${esc(c.name||'')}"></td><td><input type="text" dir="rtl" data-f="nameHe" value="${esc(c.nameHe||'')}"></td>
-        <td><select data-f="teacherId"><option value="">—</option>${options(st.staff, s=>s.id, staffLabel, c.teacherId)}</select></td>
+      <div class="row" style="margin-bottom:12px;"><input type="text" id="ncHe" dir="rtl" placeholder="כתה" style="flex:1 1 90px;"><input type="text" id="ncT" dir="rtl" placeholder="מלמד" style="flex:2 1 160px;"><button class="btn" id="ncAdd">${ICON.plus}Add</button></div>
+      ${st.classes.length ? `<table class="t"><thead><tr><th style="width:28%;">Class</th><th>Teacher</th><th style="width:1%;">Students</th><th style="width:1%;"></th></tr></thead><tbody>${st.classes.map(c=>`<tr data-cid="${esc(c.id)}" class="click ${c.id===csClassId?'sel':''}">
+        <td><input type="text" dir="rtl" data-f="nameHe" value="${esc(c.nameHe||'')}"></td><td><input type="text" dir="rtl" data-f="teacher" value="${esc(c.teacher||'')}"></td>
         <td style="text-align:center;">${studentsOf(c.id).length}</td><td class="act">${iconBtn('trash','Delete class','data-del','danger')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No classes yet</div>'}
     </div>
     <div class="card" id="subjCard"></div>
-  </div>
-  <div class="card"><div class="card-head"><h2>Staff</h2><span class="pill">${st.staff.length}</span></div>
-    <div class="row" style="margin-bottom:12px;"><input type="text" id="nsEn" placeholder="English name" style="flex:1 1 200px;"><input type="text" id="nsHe" dir="rtl" placeholder="שם בעברית" style="flex:1 1 200px;"><button class="btn" id="nsAdd">${ICON.plus}Add</button></div>
-    ${st.staff.length ? `<table class="t"><thead><tr><th>Name</th><th>Hebrew name</th><th>Classes</th><th></th></tr></thead><tbody>${st.staff.map(s=>`<tr data-id="${esc(s.id)}">
-      <td><input type="text" data-f="nameEn" value="${esc(s.nameEn||'')}"></td><td><input type="text" dir="rtl" data-f="nameHe" value="${esc(s.nameHe||'')}"></td>
-      <td>${st.classes.filter(c=>c.teacherId===s.id).map(c=>esc(classLabel(c))).join(', ') || '<span class="muted">—</span>'}</td>
-      <td class="act">${iconBtn('trash','Remove','data-del','danger')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No staff yet</div>'}
   </div>`;
-  // classes
   const addClass = ()=>{
-    const en = $('ncEn').value.trim(), h = $('ncHe').value.trim(); if(!en && !h){ $('ncEn').focus(); return; }
-    if(st.classes.some(c=>(en && c.name===en) || (h && c.nameHe===h))){ toast('That class already exists'); return; }
-    const c = {id:uid(), name:en, nameHe:h, teacherId:$('ncT').value, subjects:defaultSubjects()};
+    const h = $('ncHe').value.trim(), t = $('ncT').value.trim(); if(!h){ $('ncHe').focus(); return; }
+    if(st.classes.some(c=>c.nameHe===h)){ toast('That class already exists'); return; }
+    const c = {id:uid(), nameHe:h, teacher:t, subjects:defaultSubjects()};
     st.classes.push(c); csClassId = c.id;
-    saveAll('Add class', en||h); renderClassesStaffTab(); $('ncEn').focus();
+    saveAll('Add class', h); renderClassesStaffTab(); $('ncHe').focus();
   };
-  $('ncAdd').onclick = addClass; ['ncEn','ncHe'].forEach(id=> $(id).addEventListener('keydown', e=>{ if(e.key==='Enter') addClass(); }));
+  $('ncAdd').onclick = addClass; ['ncHe','ncT'].forEach(id=> $(id).addEventListener('keydown', e=>{ if(e.key==='Enter') addClass(); }));
   box.querySelectorAll('tr[data-cid]').forEach(tr=>{
     const c = classById(tr.dataset.cid);
     tr.addEventListener('click', e=>{ if(e.target.closest('[data-del]')) return; if(csClassId!==c.id){ csClassId = c.id; box.querySelectorAll('tr[data-cid]').forEach(x=>x.classList.toggle('sel', x===tr)); renderSubjCard(); } });
-    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{ c[inp.dataset.f] = inp.value.trim(); saveAll('Edit class', enName(c)); renderSubjCard(); }));
+    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{
+      const v = inp.value.trim();
+      if(inp.dataset.f==='nameHe' && (!v || st.classes.some(x=>x!==c && x.nameHe===v))){ toast(v ? 'That class already exists' : 'Enter the class name'); inp.value = c.nameHe; return; }
+      c[inp.dataset.f] = v; saveAll(inp.dataset.f==='teacher' ? 'Edit teacher' : 'Edit class', heName(c)); renderSubjCard();
+    }));
     tr.querySelector('[data-del]').onclick = async ()=>{
-      if(!await askConfirm('Delete class '+enName(c)+'?', 'Its students, scores, sheets and report status are removed.')) return;
+      if(!await askConfirm('Delete class '+heName(c)+'?', 'Its students, scores, sheets and report status are removed.')) return;
       st.classes = st.classes.filter(x=>x.id!==c.id); delete st.students[c.id];
       ['grades','sheets','reportStatus'].forEach(k=> Object.keys(st[k]).forEach(key=>{ if(key.startsWith(c.id+'::')) delete st[k][key]; }));
-      saveAll('Delete class', enName(c)); doneWithUndo('Class deleted'); renderClassesStaffTab();
-    };
-  });
-  // staff
-  const addStaff = ()=>{ const en = $('nsEn').value.trim(), h = $('nsHe').value.trim(); if(!en && !h){ $('nsEn').focus(); return; } st.staff.push({id:uid(), nameEn:en, nameHe:h}); saveAll('Add staff', h||en); renderClassesStaffTab(); $('nsEn').focus(); };
-  $('nsAdd').onclick = addStaff; ['nsEn','nsHe'].forEach(id=> $(id).addEventListener('keydown', e=>{ if(e.key==='Enter') addStaff(); }));
-  box.querySelectorAll('tr[data-id]').forEach(tr=>{
-    const s = staffById(tr.dataset.id);
-    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{ s[inp.dataset.f] = inp.value.trim(); saveAll('Edit staff', s.nameHe||s.nameEn); }));
-    tr.querySelector('[data-del]').onclick = async ()=>{
-      if(!await askConfirm('Remove '+(s.nameEn||s.nameHe)+'?', 'Their classes will have no teacher.', 'Remove')) return;
-      st.staff = st.staff.filter(x=>x.id!==s.id); st.classes.forEach(c=>{ if(c.teacherId===s.id) c.teacherId = ''; });
-      saveAll('Remove staff', s.nameHe||s.nameEn); doneWithUndo('Removed'); renderClassesStaffTab();
+      saveAll('Delete class', heName(c)); doneWithUndo('Class deleted'); renderClassesStaffTab();
     };
   });
   renderSubjCard();
@@ -204,7 +185,7 @@ function importRows(rows, monthId, studentsOnly){
     const cEn = pick(row, H.clsEn), cHe = pick(row, H.clsHe); if(!cEn && !cHe) return;
     const before = st.classes.length, cls = findOrCreateClass(cEn, cHe); if(st.classes.length>before) newClasses++;
     const tEn = pick(row, H.tEn), tHe = pick(row, H.tHe);
-    if((tEn || tHe) && !cls.teacherId){ const t = findOrCreateStaff(tEn, tHe); if(t) cls.teacherId = t.id; }
+    if((tEn || tHe) && !cls.teacher) cls.teacher = tHe || tEn;
     const sEn = pick(row, H.sEn), sHe = pick(row, H.sHe); if(!sEn && !sHe) return;
     const nb = studentsOf(cls.id).length, s = findOrCreateStudent(cls.id, sEn, sHe); if(studentsOf(cls.id).length>nb) newStudents++;
     if(studentsOnly || !month) return;
@@ -230,9 +211,9 @@ function monthHeaders(monthId){
   const catL = [], weekL = []; let wc = 4;
   st.classes.forEach(c=>{ c.subjects.forEach(s=>{ const arr = s.kind==='cat' ? catL : weekL; if(!arr.includes(s.label)) arr.push(s.label); }); const r = recFor(c.id, monthId); if(r && r.weekCount===5) wc = 5; });
   const weekCols = []; for(let w=1; w<=wc; w++) weekL.forEach(l=> weekCols.push(l+' '+w));
-  return {headers:['Class','כתה','Teacher','מלמד','Student','שם התלמיד','חסר','איחור','יצא מוקדם', ...catL, ...weekCols], wc};
+  return {headers:['כתה','מלמד','Student','שם התלמיד','חסר','איחור','יצא מוקדם', ...catL, ...weekCols], wc};
 }
-function baseRow(c, s){ const t = teacherOf(c); return {'Class':c.name||'', 'כתה':c.nameHe||'', 'Teacher':t?t.nameEn||'':'', 'מלמד':t?t.nameHe||'':'', 'Student':s?s.name||'':'', 'שם התלמיד':s?s.nameHe||'':''}; }
+function baseRow(c, s){ return {'כתה':heName(c), 'מלמד':c.teacher||'', 'Student':s?s.name||'':'', 'שם התלמיד':s?s.nameHe||'':''}; }
 function monthRows(monthId){
   const {headers, wc} = monthHeaders(monthId), rows = [];
   st.classes.forEach(cls=>{ const rec = recFor(cls.id, monthId); studentsOf(cls.id).forEach(s=>{
@@ -299,8 +280,8 @@ function renderDataTab(){
       const wb = XLSX.read(fr.result, {type:'array'}), all = [];
       wb.SheetNames.forEach(sn=>{
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:''});
-        const cls = st.classes.find(c=> sheetName(classLabel(c))===sn || c.name===sn || c.nameHe===sn);
-        rows.forEach(r=>{ if(!pick(r, H.clsEn) && !pick(r, H.clsHe)){ if(cls){ r['Class'] = cls.name; r['כתה'] = cls.nameHe; } else r['Class'] = sn; } all.push(r); });
+        const cls = st.classes.find(c=> sheetName(classLabel(c))===sn || c.nameHe===sn);
+        rows.forEach(r=>{ if(!pick(r, H.clsEn) && !pick(r, H.clsHe)){ if(cls) r['כתה'] = cls.nameHe; else r['כתה'] = sn; } all.push(r); });
       });
       finish(all, f.name); }catch(e){ log(e.message, true); } }; fr.readAsArrayBuffer(f); }
     else log('CSV, XLSX or XLS only', true);
@@ -398,8 +379,7 @@ function buildSampleData(){
   const clamp = (v,a,b)=>Math.max(a, Math.min(b, v));
   plan.forEach(p=>{
     if(st.classes.some(c=>c.nameHe===p.heN)) return;
-    const t = {id:uid(), nameEn:p.t[0], nameHe:p.t[1], isSample:true}; st.staff.push(t);
-    const cls = {id:uid(), name:p.en, nameHe:p.heN, teacherId:t.id, subjects:defaultSubjects(), isSample:true};
+    const cls = {id:uid(), nameHe:p.heN, teacher:p.t[1], subjects:defaultSubjects(), isSample:true};
     if(p.extra) cls.subjects.push({id:uid(), label:p.extra.label, kind:p.extra.kind});
     st.classes.push(cls); st.students[cls.id] = [];
     const used = new Set(), kids = [];

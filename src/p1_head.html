@@ -211,7 +211,7 @@
   .report-content .catline{text-align:center; font-size:var(--r-note-size); margin:4px 0 8px; text-decoration:underline;}
   .report-content .signline{margin-top:20px; font-size:var(--r-sign-size); text-align:center;}
   .report-content .signline .rule{display:inline-block; width:220px; border-bottom:1px solid #333; margin-inline-start:8px;}
-  .report-content .fail{font-size:.85em;}
+  .report-content .fail, .report-content .miss{font-size:.85em;}
   .fail-set{display:flex; align-items:center; gap:6px; flex-wrap:wrap; background:var(--accent-soft); border-radius:6px; padding:8px 10px; margin-bottom:12px; font-size:13px;}
   .fail-set input{width:62px; text-align:center; font-weight:700;}
   .par-set{display:flex; flex-direction:column; gap:10px; background:var(--accent-soft); border-radius:6px; padding:10px 12px; margin-bottom:14px;}
@@ -269,6 +269,7 @@
   .drow .c{font-size:12px; color:var(--ink-soft);}
   .drow .sj{font-size:12px; color:var(--accent-deep); background:var(--accent-soft); border-radius:9px; padding:1px 8px;}
   .dash-cols.three{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr);}
+  .dash-cols.two{grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:14px;}
   .drow .v{min-width:34px; text-align:center; font-weight:700; font-size:12px; border-radius:10px; padding:2px 6px;}
   .drow .v.bad{background:var(--bad-bg); color:var(--bad);} .drow .v.good{background:var(--good-bg); color:var(--good);} .drow .v.mid{background:var(--mid-bg); color:var(--mid);}
   .seg{display:inline-flex; align-items:center; gap:1px; border:1px solid var(--line); border-radius:6px; padding:0 2px 0 7px; margin-left:6px; background:#fff;}

@@ -211,7 +211,7 @@
   .report-content .catline{text-align:center; font-size:var(--r-note-size); margin:4px 0 8px; text-decoration:underline;}
   .report-content .signline{margin-top:20px; font-size:var(--r-sign-size); text-align:center;}
   .report-content .signline .rule{display:inline-block; width:220px; border-bottom:1px solid #333; margin-inline-start:8px;}
-  .report-content .fail{font-size:.85em;}
+  .report-content .fail, .report-content .miss{font-size:.85em;}
   .fail-set{display:flex; align-items:center; gap:6px; flex-wrap:wrap; background:var(--accent-soft); border-radius:6px; padding:8px 10px; margin-bottom:12px; font-size:13px;}
   .fail-set input{width:62px; text-align:center; font-weight:700;}
   .par-set{display:flex; flex-direction:column; gap:10px; background:var(--accent-soft); border-radius:6px; padding:10px 12px; margin-bottom:14px;}
@@ -269,6 +269,7 @@
   .drow .c{font-size:12px; color:var(--ink-soft);}
   .drow .sj{font-size:12px; color:var(--accent-deep); background:var(--accent-soft); border-radius:9px; padding:1px 8px;}
   .dash-cols.three{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr);}
+  .dash-cols.two{grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:14px;}
   .drow .v{min-width:34px; text-align:center; font-weight:700; font-size:12px; border-radius:10px; padding:2px 6px;}
   .drow .v.bad{background:var(--bad-bg); color:var(--bad);} .drow .v.good{background:var(--good-bg); color:var(--good);} .drow .v.mid{background:var(--mid-bg); color:var(--mid);}
   .seg{display:inline-flex; align-items:center; gap:1px; border:1px solid var(--line); border-radius:6px; padding:0 2px 0 7px; margin-left:6px; background:#fff;}
@@ -393,7 +394,7 @@ const DEFAULT_REPORT_TEXT = {
   note: 'הערה: עס מאכט זיך אמאל אז דאס קינד לערנט בעסער פון וואס עס שטעלט זיך ארויס אויף די בחינה.',
   scoreNote: 'הציונים ווערן גערעכנט פון 1–10, 10 איז די בעסטע',
   signature: 'חתימת ההורים',
-  weekHeader: 'פרשת', lateHeader: 'איחורים', absentHeader: 'חסרים', earlyHeader: 'יצא מוקדם', failText: 'לא הצליח'
+  weekHeader: 'פרשת', lateHeader: 'איחורים', absentHeader: 'חסרים', earlyHeader: 'יצא מוקדם', failText: 'לא הצליח', missingText: 'חסר'
 };
 const SIZE_LABELS = {title:'Title', lead:'Opening text', name:'Student name', classline:'Class line', thead:'Table headers', tbody:'Table scores', note:'Notes', sign:'Signature'};
 const DEFAULT_SIZES = {title:28, lead:16, name:30, classline:15, thead:15, tbody:16, note:13, sign:15};
@@ -407,7 +408,7 @@ const st = {
   sizes: Object.assign({}, DEFAULT_SIZES),
   printLetterhead: true,
   reportPresets: [],
-  dashboardThresholds: {absences:3, lates:3, low:70, high:85},
+  dashboardThresholds: {absences:3, lates:3, low:70, high:85, change:20},
   failBelow: 40   // on reports, a weekly score under this prints as "לא הצליח" ('' = off)
 };
 const assets = { letterheadDataUrl:null };
@@ -532,7 +533,7 @@ const monthById = id => st.months.find(m=>m.id===id);
 /* ---------------- shape / migration ---------------- */
 const classById = id => st.classes.find(c=>c.id===id);
 const staffById = id => st.staff.find(s=>s.id===id);
-const teacherOf = cls => staffById(cls && cls.teacherId);
+const teacherOf = cls => cls && cls.teacher ? {nameHe: cls.teacher} : null;   // the teacher's name is typed on the class
 const studentsOf = classId => st.students[classId] || [];
 function ensureClassShape(cls){ if(!cls.subjects || !cls.subjects.length) cls.subjects = defaultSubjects(); return cls; }
 function migrateStudentRecord(d){
@@ -636,16 +637,13 @@ function migrateLoadedState(){
   st.grades = st.grades || {};
   st.sheets = st.sheets || {};
   st.reportStatus = st.reportStatus || {};
-  // teachers typed on a class become staff
+  // a class has one (Hebrew) name and its teacher's name typed in; the old staff list fills in the teacher
   st.classes.forEach(c=>{
     ensureClassShape(c);
-    if(c.teacher && !c.teacherId){
-      let s = st.staff.find(x=>x.nameHe===c.teacher || x.nameEn===c.teacher);
-      if(!s){ s = {id:uid(), nameEn: isHeb(c.teacher)?'':c.teacher, nameHe: isHeb(c.teacher)?c.teacher:''}; st.staff.push(s); }
-      c.teacherId = s.id;
-    }
-    delete c.teacher;
-    if(c.nameHe===undefined){ if(isHeb(c.name)){ c.nameHe = c.name; c.name = ''; } else c.nameHe = ''; }
+    if(typeof c.teacher!=='string'){ const s = staffById(c.teacherId); c.teacher = s ? (s.nameHe || s.nameEn || '') : ''; }
+    delete c.teacherId;
+    if(!String(c.nameHe||'').trim()) c.nameHe = c.name || '';
+    delete c.name;
   });
   Object.keys(st.students).forEach(cid=> (st.students[cid]||[]).forEach(s=>{
     if(s.nameHe===undefined){ if(isHeb(s.name)){ s.nameHe = s.name; s.name = ''; } else s.nameHe = ''; }
@@ -665,7 +663,7 @@ function migrateLoadedState(){
   delete st.typography; delete st.customFonts; delete st.customFontData;
   st.reportPresets = Array.isArray(st.reportPresets) ? st.reportPresets : [];
   st.printLetterhead = st.printLetterhead!==false;
-  st.dashboardThresholds = Object.assign({absences:3, lates:3, low:70, high:85}, st.dashboardThresholds||{});
+  st.dashboardThresholds = Object.assign({absences:3, lates:3, low:70, high:85, change:20}, st.dashboardThresholds||{});
   if(st.failBelow===undefined) st.failBelow = 40;
   st.months.forEach(m=>{
     if(m.year){ m.year = normYear(m.year); return; }
@@ -1043,7 +1041,7 @@ function renderActive(){
   ({dashboard:renderDashboard, profile:renderProfile, students:renderStudents, scores:renderScores, assessments:renderAssessments, reports:renderReports, settings:renderSettings, audit:renderAudit}[activeTab] || (()=>{}))();
 }
 const pageHead = (title, extra='') => `<div class="page-head"><h1>${esc(title)}</h1><span class="sp"></span>${extra}</div>`;
-const classLabel = c => enName(c) + (c.nameHe && c.nameHe!==enName(c) ? ' · '+c.nameHe : '');
+const classLabel = c => heName(c);
 
 /* =====================================================================
    Averages
@@ -1103,6 +1101,27 @@ function studentSubjectAvg(cls, sid, sj){
   });
   return avgOf(vals);
 }
+// a student's score for one subject in one month, out of 100 (monthly ×10, weekly = that month's average)
+function subjMonthPct(cls, sid, sj, m){
+  const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return null;
+  const ok = v => v!=='' && v!=null && !isNaN(Number(v));
+  if(sj.kind==='cat'){ const v = (d.cat||{})[sj.id]; return ok(v) ? Number(v)*10 : null; }
+  const a = avgOf(((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).filter(ok).map(Number)); return a;
+}
+// last month with a score compared with the month before it that had one
+function subjChange(cls, sid, sj){
+  const pts = sortedMonths().map(m=>({m, v: subjMonthPct(cls, sid, sj, m)})).filter(x=>x.v!==null);
+  if(pts.length<2) return null;
+  const a = pts[pts.length-2], b = pts[pts.length-1];
+  return {diff: b.v - a.v, from:a, to:b};
+}
+// Dashboard limits: anyone signed in may change them (the principal keeps track with a View login)
+function saveDashLimits(){
+  if(canEdit()){ saveAll('Dashboard limits'); return; }
+  if(CLOUD && SB){ SB.rpc('gilyon_set_dash', {v: st.dashboardThresholds}).then(r=>{ if(r.error){ toast('Not saved: '+r.error.message); return; } cloudVersion = Number(r.data) || cloudVersion; if(synced) synced.dashboardThresholds = clone(st.dashboardThresholds); snap = trackState(); });
+    return; }
+  persistState();   // test version
+}
 function renderDashboard(){
   const T = st.dashboardThresholds, P = $('panel-dashboard');
   const all = [], low = [];
@@ -1115,12 +1134,20 @@ function renderDashboard(){
     });
   }));
   low.sort((x,y)=>x.pct-y.pct);
+  const up = [], down = [];
+  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=> (cls.subjects||[]).forEach(sj=>{
+    const ch = subjChange(cls, s.id, sj); if(!ch || Math.abs(ch.diff) < T.change || T.change<=0) return;
+    (ch.diff>0 ? up : down).push({cls, s, sj, ch});
+  })));
+  up.sort((a,b)=>b.ch.diff-a.ch.diff); down.sort((a,b)=>a.ch.diff-b.ch.diff);
   const abs = all.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab);
   const lat = all.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
   const monthsWith = sortedMonths().filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id))).length;
-  const thr = k => `<input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0" ${canEdit()?'':'disabled'}>`;
+  const thr = k => `<input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0">`;
   const fmt = r => r.sj.kind==='cat' ? (Math.round(r.a*10)/10).toString() : Math.round(r.a);
-  const list = (rows, val, klass, sub) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}"><span class="v ${klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
+  const chg = r => (r.ch.diff>0?'▲ ':'▼ ')+Math.round(Math.abs(r.ch.diff));
+  const chgTip = r => `${monthShort(r.ch.from.m.label)} ${Math.round(r.ch.from.v)} → ${monthShort(r.ch.to.m.label)} ${Math.round(r.ch.to.v)}`;
+  const list = (rows, val, klass, sub, tip) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}" ${tip?`data-tip="${esc(tip(r))}"`:''}><span class="v ${klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
   P.innerHTML = pageHead('Dashboard', `<span class="tag wait he" style="font-size:13px;">${esc(st.currentYear)}</span>`) + `
     <div class="stat-grid three">
       <div class="stat"><div class="n">${all.length}</div><div class="l">Students</div></div>
@@ -1131,10 +1158,14 @@ function renderDashboard(){
       <div class="card ins low"><h2>Below ${thr('low')} by subject <span class="pill">${low.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Monthly subjects below ${T.low/10} out of 10</div>${list(low, fmt, 'bad', true)}</div>
       <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2>${list(abs, r=>r.ab, 'bad')}</div>
       <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2>${list(lat, r=>r.la, 'mid')}</div>
+    </div>
+    <div class="dash-cols two">
+      <div class="card ins high"><h2>Went up ${thr('change')} or more <span class="pill">${up.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Last month compared with the month before · out of 100</div>${list(up, chg, 'good', true, chgTip)}</div>
+      <div class="card ins low"><h2>Went down ${thr('change')} or more <span class="pill">${down.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Last month compared with the month before · out of 100</div>${list(down, chg, 'bad', true, chgTip)}</div>
     </div>`;
   P.querySelectorAll('.thr').forEach(inp=> inp.addEventListener('change', ()=>{
     st.dashboardThresholds[inp.dataset.thr] = Math.max(0, Math.floor(Number(inp.value)||0));
-    saveAll('Dashboard limits'); renderDashboard();
+    saveDashLimits(); renderDashboard();
   }));
   P.querySelectorAll('.drow').forEach(b=> b.addEventListener('click', ()=> openProfile(b.dataset.cls, b.dataset.sid)));
 }
@@ -1198,9 +1229,9 @@ let stuFilter = '', stuSearch = '';
 function findOrCreateClass(name, nameHe){
   name = String(name||'').trim(); nameHe = String(nameHe||'').trim();
   if(!name && !nameHe) return null;
-  let cls = st.classes.find(c=> (name && (c.name===name || c.nameHe===name)) || (nameHe && (c.nameHe===nameHe || c.name===nameHe)));
-  if(!cls){ cls = {id:uid(), name: name && !isHeb(name) ? name : '', nameHe: nameHe || (isHeb(name)?name:''), teacherId:'', subjects: defaultSubjects()}; st.classes.push(cls); st.students[cls.id] = []; }
-  else { if(!cls.nameHe && nameHe) cls.nameHe = nameHe; if(!cls.name && name && !isHeb(name)) cls.name = name; }
+  const want = nameHe || name;
+  let cls = st.classes.find(c=> c.nameHe===want || (name && c.nameHe===name));
+  if(!cls){ cls = {id:uid(), nameHe: want, teacher:'', subjects: defaultSubjects()}; st.classes.push(cls); st.students[cls.id] = []; }
   return ensureClassShape(cls);
 }
 function findOrCreateStaff(nameEn, nameHe){
@@ -1244,7 +1275,7 @@ function renderStudents(){
   const chips = `<div class="tabs" style="margin-bottom:12px;">${[{id:'', label:'All', n:all.length}].concat(st.classes.map(c=>({id:c.id, label:classLabel(c), n:studentsOf(c.id).length}))).map(t=>`<button data-f="${esc(t.id)}" class="${t.id===stuFilter?'on':''}">${esc(t.label)} <span class="pill" style="height:18px;font-size:11px;">${t.n}</span></button>`).join('')}</div>`;
   const addCls = stuFilter || (st.classes[0] && st.classes[0].id) || '';
   P.innerHTML = pageHead('Students', `<button class="btn sec" id="pasteStu">${ICON.plus}Paste / upload list</button>`) + `
-    ${st.classes.length ? '' : '<div class="notice warn">Add a class first in Settings → Classes &amp; Staff.</div>'}
+    ${st.classes.length ? '' : '<div class="notice warn">Add a class first in Settings → Classes.</div>'}
     <div class="card"><div class="row">
       <input type="text" id="newStuEn" placeholder="English name" style="flex:1 1 180px;">
       <input type="text" id="newStuHe" placeholder="שם בעברית" dir="rtl" style="flex:1 1 180px;">
@@ -1404,7 +1435,7 @@ function renderScores(){
 }
 function renderScoresGrid(){
   const box = $('scGrid'), cls = classById(scoreClassId), month = monthById(scoreMonthId);
-  if(!cls || !month){ box.innerHTML = `<div class="empty">${st.classes.length?'Pick a class and month':'Add a class first in Settings → Classes &amp; Staff'}</div>`; return; }
+  if(!cls || !month){ box.innerHTML = `<div class="empty">${st.classes.length?'Pick a class and month':'Add a class first in Settings → Classes'}</div>`; return; }
   const rec = getGradeRecord(cls.id, month.id), wc = rec.weekCount, defs = buildColumnDefs(cls, wc), students = sortedStudents(cls.id), gs = groupStarts(defs);
   const label = enName(cls)+' · '+month.label;
   const ro = !canEdit();
@@ -1605,7 +1636,7 @@ const SHEET_CSS = `
 .sheet table.sh th, .sheet table.sh td{border:1.2px solid #24434a; text-align:center; padding:1px 2px;}
 .sheet table.sh thead tr.g th{background:#0b4856; color:#fff; font-size:12px; font-weight:700; height:.3in;}
 .sheet table.sh thead tr.s th{background:#e6f0f1; color:#0b4856; font-size:11px; font-weight:700; overflow-wrap:anywhere; line-height:1.1; height:.32in;}
-.sheet table.sh th.wk .p{display:block; font-weight:400; font-size:10px; margin-top:2px; color:#d9e8e8; text-align:right; padding-right:3px;}
+.sheet table.sh th.wk .p{display:block; font-weight:400; font-size:10px; margin-top:2px; color:#d9e8e8; text-align:center; padding:0 2px;}
 .sheet table.sh th.wk .p span{display:inline-block; width:62%; border-bottom:1px solid #d5aa4e; height:12px;}
 .sheet table.sh td.nm{text-align:right; padding-right:6px; white-space:nowrap; overflow:hidden; font-weight:600;}
 .sheet table.sh td.no{color:#5a7479; font-size:11px;}
@@ -1613,7 +1644,7 @@ const SHEET_CSS = `
 .sheet table.sh .gs{border-right:3px solid #0b4856 !important;}
 .sheet table.sh thead tr.g th.gs{border-right-color:#d5aa4e !important;}
 .sheet table.sh td.val{font-size:15px; font-weight:700; color:#0b4856;}
-.sheet .pf{color:#fff; font-size:11px;}
+.sheet .pf{color:#fff; font-size:12px;}
 .sheet .sh-review{border:2px solid #d5aa4e; color:#0b4856; font-weight:700; padding:8px 14px; border-radius:6px; font-size:15px;}
 .sheet .sh-foot{position:absolute; bottom:.3in; left:.45in; right:.45in; font-size:10.5px; color:#5a7479; display:flex; justify-content:space-between;}
 `;
@@ -1629,7 +1660,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
   const rec = fill && fill.rec, par = parsh || (rec ? rec.parshiot : []);
   let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
   if(catCols.length) g += `<th colspan="${catCols.length}" class="gs">ציונים חודשיים (1–10)</th>`;
-  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">פרשה: ${par[w] ? `<b class="pf">${esc(par[w])}</b>` : '<span></span>'}</span></th>`;
+  for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">${par[w] ? `<b class="pf">${esc(par[w])}</b>` : 'פרשה: <span></span>'}</span></th>`;
   let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc(c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he)}</th>`).join('');
   const body = L.rows.map((r,i)=>{
     const d = rec && rec.perStudent[r.sid];
@@ -1698,7 +1729,7 @@ function renderAssessments(){
   const detail = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${parRow}
     ${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students</th><th>Sheet</th><th></th></tr></thead><tbody>${classes.map(c=>{
       const s = sheetState(c, month.id), sh = st.sheets[gradeKey(c.id, month.id)];
-      return `<tr data-cid="${esc(c.id)}"><td>${esc(enName(c))} ${c.nameHe?`<span class="muted">· ${he(c.nameHe)}</span>`:''}</td><td>${he(heName(teacherOf(c)))}</td><td>${studentsOf(c.id).length}</td>
+      return `<tr data-cid="${esc(c.id)}"><td>${he(heName(c))}</td><td>${he(heName(teacherOf(c)))}</td><td>${studentsOf(c.id).length}</td>
         <td>${STATE_TAG[s]} ${sh?`<span class="muted small" style="font-family:monospace;">${esc(sh.code)}</span>`:''}</td><td class="act">${sheetActs('data-cact', s)}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">Add classes and students first</div>'}</div>` : '';
   P.innerHTML = pageHead('Assessments', `<button class="btn" id="scanBtn">${ICON.scan}Scan sheets</button>`) +
@@ -2099,10 +2130,13 @@ function reportPageHtml(cls, month, s, rec, opt){
   let weekHtml = '';
   if(weekS.length){
     let rows = '';
+    // a week is on the report once the class has weekly scores for it; a blank score shows חסר
+    const filled = v => String(v ?? '').trim()!=='';
+    const classWeek = i => rec && Object.values(rec.perStudent||{}).some(x=> weekS.some(w=> filled(((x.week||{})[w.id]||[])[i])));
+    const miss = `<span class="miss">${esc(st.reportText.missingText||'חסר')}</span>`;
     for(let i=0;i<wc;i++){
-      const any = weekS.some(w=> ((d.week[w.id]||[])[i]||'')!=='');
-      if(!any && !String(typed[i]||'').trim()) continue;
-      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>`<td>${reportScore((d.week[w.id]||[])[i])}</td>`).join('')}</tr>`;
+      if(!classWeek(i) && !String(typed[i]||'').trim()) continue;
+      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{ const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v) : miss}</td>`; }).join('')}</tr>`;
     }
     if(!rows) rows = `<tr><td colspan="${weekS.length+1}">—</td></tr>`;
     weekHtml = `<table class="rtab"><tr><th>${esc(st.reportText.weekHeader)}</th>${weekS.map(w=>`<th>${esc(w.label)}</th>`).join('')}</tr>${rows}</table>`;
@@ -2212,7 +2246,7 @@ function renderReports(){
   const table = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students with scores</th><th></th></tr></thead><tbody>${classes.map(c=>{
       const n = studentsOf(c.id).length, rec = recFor(c.id, month.id), filled = rec ? studentsOf(c.id).filter(s=>hasAnyScore(rec.perStudent[s.id])).length : 0, dis = filled ? '' : 'disabled';
       const b = (act, icon, tip) => `<button type="button" class="icon-btn" data-ract="${act}" data-tip="${tip}" ${dis}>${ICON[icon]}</button>`;
-      return `<tr data-cid="${esc(c.id)}" class="click ${repSel&&repSel.classId===c.id?'sel':''}"><td>${esc(enName(c))} ${c.nameHe?`<span class="muted">· ${he(c.nameHe)}</span>`:''}</td><td>${he(heName(teacherOf(c)))}</td>
+      return `<tr data-cid="${esc(c.id)}" class="click ${repSel&&repSel.classId===c.id?'sel':''}"><td>${he(heName(c))}</td><td>${he(heName(teacherOf(c)))}</td>
         <td><span class="${filled===n?'':'muted'}">${filled}/${n}</span></td>
         <td class="act">${seg('Review', b('rview','view','View review sheet')+b('rprint','print','Print review sheet')+b('rpdf','download','Review sheet PDF'))}${seg('Reports', b('view','view','View reports')+b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">No classes with students</div>'}</div>` : '';
@@ -2262,7 +2296,7 @@ function renderRepPreview(){
 }
 
 /* ---------- Report Setup (Settings) ---------- */
-const REPORT_TEXT_FIELDS = [['title','Title'],['signature','Signature'],['lead','Opening text · {month}','full'],['classLine','Class line · {class} {teacher}','full'],['note','Note','full'],['scoreNote','Score note','full'],['weekHeader','Weekly column'],['lateHeader','Late'],['absentHeader','Absent'],['earlyHeader','Left early'],['failText','Weekly score below the limit']];
+const REPORT_TEXT_FIELDS = [['title','Title'],['signature','Signature'],['lead','Opening text · {month}','full'],['classLine','Class line · {class} {teacher}','full'],['note','Note','full'],['scoreNote','Score note','full'],['weekHeader','Weekly column'],['lateHeader','Late'],['absentHeader','Absent'],['earlyHeader','Left early'],['failText','Weekly score below the limit'],['missingText','Weekly score left blank']];
 let setupPv = {classId:'', sid:'', monthId:''};
 function renderReportSetup(box){
   const L = st.layout;
@@ -2342,7 +2376,7 @@ function renderReportSetup(box){
 /* =====================================================================
    Settings – tabs like the Kriah app
    ===================================================================== */
-const SETTINGS_TABS = [['classes','Classes & Staff'],['year','School Year'],['report','Report Setup'],['ai','AI Scanning'],['users','Users'],['data','Backup / Data']];
+const SETTINGS_TABS = [['classes','Classes'],['year','School Year'],['report','Report Setup'],['ai','AI Scanning'],['users','Users'],['data','Backup / Data']];
 let settingsTab = 'classes';
 function renderSettings(){
   const P = $('panel-settings');
@@ -2361,65 +2395,46 @@ function renderYearTab(){
       return `<tr><td>${he(m.label)}</td><td>${sc}/${cl.length}</td><td>${sh}/${cl.length}</td><td>${sn}/${cl.length}</td></tr>`; }).join('')}</tbody></table></div>`;
   $('yearSel').onchange = e=>{ st.currentYear = e.target.value; saveAll('School year', st.currentYear); renderYearTab(); };
   $('newYear').onclick = async ()=>{
-    if(!await askConfirm('Start school year '+next+'?', 'Classes, staff and students stay. Dashboard, scores, assessments and reports switch to '+next+'.', 'Start', '')) return;
+    if(!await askConfirm('Start school year '+next+'?', 'Classes and students stay. Dashboard, scores, assessments and reports switch to '+next+'.', 'Start', '')) return;
     ensureYearMonths(next); st.currentYear = next; saveAll('Start school year', next); doneWithUndo('School year '+next); renderYearTab();
   };
 }
 
-/* ---------- Classes & Staff (one tab) ---------- */
+/* ---------- Classes (name in Hebrew, teacher typed in) ---------- */
 let csClassId = '';
-const staffLabel = s => (s.nameEn||s.nameHe||'') + (s.nameEn && s.nameHe ? ' · '+s.nameHe : '');
 function renderClassesStaffTab(){
   const box = $('stBody');
   if(!classById(csClassId)) csClassId = st.classes[0] ? st.classes[0].id : '';
   box.innerHTML = `<div class="cs-grid">
     <div class="card"><div class="card-head"><h2>Classes</h2><span class="pill">${st.classes.length}</span></div>
-      <div class="row" style="margin-bottom:12px;"><input type="text" id="ncEn" placeholder="Class (English)" style="flex:1 1 120px;"><input type="text" id="ncHe" dir="rtl" placeholder="כתה" style="flex:1 1 90px;">
-        <select id="ncT" style="flex:1 1 150px;"><option value="">Teacher</option>${options(st.staff, s=>s.id, staffLabel, '')}</select><button class="btn" id="ncAdd">${ICON.plus}Add</button></div>
-      ${st.classes.length ? `<table class="t"><thead><tr><th style="width:22%;">Class</th><th style="width:16%;">Hebrew name</th><th>Teacher</th><th style="width:1%;">Students</th><th style="width:1%;"></th></tr></thead><tbody>${st.classes.map(c=>`<tr data-cid="${esc(c.id)}" class="click ${c.id===csClassId?'sel':''}">
-        <td><input type="text" data-f="name" value="${esc(c.name||'')}"></td><td><input type="text" dir="rtl" data-f="nameHe" value="${esc(c.nameHe||'')}"></td>
-        <td><select data-f="teacherId"><option value="">—</option>${options(st.staff, s=>s.id, staffLabel, c.teacherId)}</select></td>
+      <div class="row" style="margin-bottom:12px;"><input type="text" id="ncHe" dir="rtl" placeholder="כתה" style="flex:1 1 90px;"><input type="text" id="ncT" dir="rtl" placeholder="מלמד" style="flex:2 1 160px;"><button class="btn" id="ncAdd">${ICON.plus}Add</button></div>
+      ${st.classes.length ? `<table class="t"><thead><tr><th style="width:28%;">Class</th><th>Teacher</th><th style="width:1%;">Students</th><th style="width:1%;"></th></tr></thead><tbody>${st.classes.map(c=>`<tr data-cid="${esc(c.id)}" class="click ${c.id===csClassId?'sel':''}">
+        <td><input type="text" dir="rtl" data-f="nameHe" value="${esc(c.nameHe||'')}"></td><td><input type="text" dir="rtl" data-f="teacher" value="${esc(c.teacher||'')}"></td>
         <td style="text-align:center;">${studentsOf(c.id).length}</td><td class="act">${iconBtn('trash','Delete class','data-del','danger')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No classes yet</div>'}
     </div>
     <div class="card" id="subjCard"></div>
-  </div>
-  <div class="card"><div class="card-head"><h2>Staff</h2><span class="pill">${st.staff.length}</span></div>
-    <div class="row" style="margin-bottom:12px;"><input type="text" id="nsEn" placeholder="English name" style="flex:1 1 200px;"><input type="text" id="nsHe" dir="rtl" placeholder="שם בעברית" style="flex:1 1 200px;"><button class="btn" id="nsAdd">${ICON.plus}Add</button></div>
-    ${st.staff.length ? `<table class="t"><thead><tr><th>Name</th><th>Hebrew name</th><th>Classes</th><th></th></tr></thead><tbody>${st.staff.map(s=>`<tr data-id="${esc(s.id)}">
-      <td><input type="text" data-f="nameEn" value="${esc(s.nameEn||'')}"></td><td><input type="text" dir="rtl" data-f="nameHe" value="${esc(s.nameHe||'')}"></td>
-      <td>${st.classes.filter(c=>c.teacherId===s.id).map(c=>esc(classLabel(c))).join(', ') || '<span class="muted">—</span>'}</td>
-      <td class="act">${iconBtn('trash','Remove','data-del','danger')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No staff yet</div>'}
   </div>`;
-  // classes
   const addClass = ()=>{
-    const en = $('ncEn').value.trim(), h = $('ncHe').value.trim(); if(!en && !h){ $('ncEn').focus(); return; }
-    if(st.classes.some(c=>(en && c.name===en) || (h && c.nameHe===h))){ toast('That class already exists'); return; }
-    const c = {id:uid(), name:en, nameHe:h, teacherId:$('ncT').value, subjects:defaultSubjects()};
+    const h = $('ncHe').value.trim(), t = $('ncT').value.trim(); if(!h){ $('ncHe').focus(); return; }
+    if(st.classes.some(c=>c.nameHe===h)){ toast('That class already exists'); return; }
+    const c = {id:uid(), nameHe:h, teacher:t, subjects:defaultSubjects()};
     st.classes.push(c); csClassId = c.id;
-    saveAll('Add class', en||h); renderClassesStaffTab(); $('ncEn').focus();
+    saveAll('Add class', h); renderClassesStaffTab(); $('ncHe').focus();
   };
-  $('ncAdd').onclick = addClass; ['ncEn','ncHe'].forEach(id=> $(id).addEventListener('keydown', e=>{ if(e.key==='Enter') addClass(); }));
+  $('ncAdd').onclick = addClass; ['ncHe','ncT'].forEach(id=> $(id).addEventListener('keydown', e=>{ if(e.key==='Enter') addClass(); }));
   box.querySelectorAll('tr[data-cid]').forEach(tr=>{
     const c = classById(tr.dataset.cid);
     tr.addEventListener('click', e=>{ if(e.target.closest('[data-del]')) return; if(csClassId!==c.id){ csClassId = c.id; box.querySelectorAll('tr[data-cid]').forEach(x=>x.classList.toggle('sel', x===tr)); renderSubjCard(); } });
-    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{ c[inp.dataset.f] = inp.value.trim(); saveAll('Edit class', enName(c)); renderSubjCard(); }));
+    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{
+      const v = inp.value.trim();
+      if(inp.dataset.f==='nameHe' && (!v || st.classes.some(x=>x!==c && x.nameHe===v))){ toast(v ? 'That class already exists' : 'Enter the class name'); inp.value = c.nameHe; return; }
+      c[inp.dataset.f] = v; saveAll(inp.dataset.f==='teacher' ? 'Edit teacher' : 'Edit class', heName(c)); renderSubjCard();
+    }));
     tr.querySelector('[data-del]').onclick = async ()=>{
-      if(!await askConfirm('Delete class '+enName(c)+'?', 'Its students, scores, sheets and report status are removed.')) return;
+      if(!await askConfirm('Delete class '+heName(c)+'?', 'Its students, scores, sheets and report status are removed.')) return;
       st.classes = st.classes.filter(x=>x.id!==c.id); delete st.students[c.id];
       ['grades','sheets','reportStatus'].forEach(k=> Object.keys(st[k]).forEach(key=>{ if(key.startsWith(c.id+'::')) delete st[k][key]; }));
-      saveAll('Delete class', enName(c)); doneWithUndo('Class deleted'); renderClassesStaffTab();
-    };
-  });
-  // staff
-  const addStaff = ()=>{ const en = $('nsEn').value.trim(), h = $('nsHe').value.trim(); if(!en && !h){ $('nsEn').focus(); return; } st.staff.push({id:uid(), nameEn:en, nameHe:h}); saveAll('Add staff', h||en); renderClassesStaffTab(); $('nsEn').focus(); };
-  $('nsAdd').onclick = addStaff; ['nsEn','nsHe'].forEach(id=> $(id).addEventListener('keydown', e=>{ if(e.key==='Enter') addStaff(); }));
-  box.querySelectorAll('tr[data-id]').forEach(tr=>{
-    const s = staffById(tr.dataset.id);
-    tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{ s[inp.dataset.f] = inp.value.trim(); saveAll('Edit staff', s.nameHe||s.nameEn); }));
-    tr.querySelector('[data-del]').onclick = async ()=>{
-      if(!await askConfirm('Remove '+(s.nameEn||s.nameHe)+'?', 'Their classes will have no teacher.', 'Remove')) return;
-      st.staff = st.staff.filter(x=>x.id!==s.id); st.classes.forEach(c=>{ if(c.teacherId===s.id) c.teacherId = ''; });
-      saveAll('Remove staff', s.nameHe||s.nameEn); doneWithUndo('Removed'); renderClassesStaffTab();
+      saveAll('Delete class', heName(c)); doneWithUndo('Class deleted'); renderClassesStaffTab();
     };
   });
   renderSubjCard();
@@ -2544,7 +2559,7 @@ function importRows(rows, monthId, studentsOnly){
     const cEn = pick(row, H.clsEn), cHe = pick(row, H.clsHe); if(!cEn && !cHe) return;
     const before = st.classes.length, cls = findOrCreateClass(cEn, cHe); if(st.classes.length>before) newClasses++;
     const tEn = pick(row, H.tEn), tHe = pick(row, H.tHe);
-    if((tEn || tHe) && !cls.teacherId){ const t = findOrCreateStaff(tEn, tHe); if(t) cls.teacherId = t.id; }
+    if((tEn || tHe) && !cls.teacher) cls.teacher = tHe || tEn;
     const sEn = pick(row, H.sEn), sHe = pick(row, H.sHe); if(!sEn && !sHe) return;
     const nb = studentsOf(cls.id).length, s = findOrCreateStudent(cls.id, sEn, sHe); if(studentsOf(cls.id).length>nb) newStudents++;
     if(studentsOnly || !month) return;
@@ -2570,9 +2585,9 @@ function monthHeaders(monthId){
   const catL = [], weekL = []; let wc = 4;
   st.classes.forEach(c=>{ c.subjects.forEach(s=>{ const arr = s.kind==='cat' ? catL : weekL; if(!arr.includes(s.label)) arr.push(s.label); }); const r = recFor(c.id, monthId); if(r && r.weekCount===5) wc = 5; });
   const weekCols = []; for(let w=1; w<=wc; w++) weekL.forEach(l=> weekCols.push(l+' '+w));
-  return {headers:['Class','כתה','Teacher','מלמד','Student','שם התלמיד','חסר','איחור','יצא מוקדם', ...catL, ...weekCols], wc};
+  return {headers:['כתה','מלמד','Student','שם התלמיד','חסר','איחור','יצא מוקדם', ...catL, ...weekCols], wc};
 }
-function baseRow(c, s){ const t = teacherOf(c); return {'Class':c.name||'', 'כתה':c.nameHe||'', 'Teacher':t?t.nameEn||'':'', 'מלמד':t?t.nameHe||'':'', 'Student':s?s.name||'':'', 'שם התלמיד':s?s.nameHe||'':''}; }
+function baseRow(c, s){ return {'כתה':heName(c), 'מלמד':c.teacher||'', 'Student':s?s.name||'':'', 'שם התלמיד':s?s.nameHe||'':''}; }
 function monthRows(monthId){
   const {headers, wc} = monthHeaders(monthId), rows = [];
   st.classes.forEach(cls=>{ const rec = recFor(cls.id, monthId); studentsOf(cls.id).forEach(s=>{
@@ -2639,8 +2654,8 @@ function renderDataTab(){
       const wb = XLSX.read(fr.result, {type:'array'}), all = [];
       wb.SheetNames.forEach(sn=>{
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:''});
-        const cls = st.classes.find(c=> sheetName(classLabel(c))===sn || c.name===sn || c.nameHe===sn);
-        rows.forEach(r=>{ if(!pick(r, H.clsEn) && !pick(r, H.clsHe)){ if(cls){ r['Class'] = cls.name; r['כתה'] = cls.nameHe; } else r['Class'] = sn; } all.push(r); });
+        const cls = st.classes.find(c=> sheetName(classLabel(c))===sn || c.nameHe===sn);
+        rows.forEach(r=>{ if(!pick(r, H.clsEn) && !pick(r, H.clsHe)){ if(cls) r['כתה'] = cls.nameHe; else r['כתה'] = sn; } all.push(r); });
       });
       finish(all, f.name); }catch(e){ log(e.message, true); } }; fr.readAsArrayBuffer(f); }
     else log('CSV, XLSX or XLS only', true);
@@ -2738,8 +2753,7 @@ function buildSampleData(){
   const clamp = (v,a,b)=>Math.max(a, Math.min(b, v));
   plan.forEach(p=>{
     if(st.classes.some(c=>c.nameHe===p.heN)) return;
-    const t = {id:uid(), nameEn:p.t[0], nameHe:p.t[1], isSample:true}; st.staff.push(t);
-    const cls = {id:uid(), name:p.en, nameHe:p.heN, teacherId:t.id, subjects:defaultSubjects(), isSample:true};
+    const cls = {id:uid(), nameHe:p.heN, teacher:p.t[1], subjects:defaultSubjects(), isSample:true};
     if(p.extra) cls.subjects.push({id:uid(), label:p.extra.label, kind:p.extra.kind});
     st.classes.push(cls); st.students[cls.id] = [];
     const used = new Set(), kids = [];

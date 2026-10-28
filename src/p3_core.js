@@ -57,7 +57,7 @@ const DEFAULT_REPORT_TEXT = {
   note: 'הערה: עס מאכט זיך אמאל אז דאס קינד לערנט בעסער פון וואס עס שטעלט זיך ארויס אויף די בחינה.',
   scoreNote: 'הציונים ווערן גערעכנט פון 1–10, 10 איז די בעסטע',
   signature: 'חתימת ההורים',
-  weekHeader: 'פרשת', lateHeader: 'איחורים', absentHeader: 'חסרים', earlyHeader: 'יצא מוקדם', failText: 'לא הצליח'
+  weekHeader: 'פרשת', lateHeader: 'איחורים', absentHeader: 'חסרים', earlyHeader: 'יצא מוקדם', failText: 'לא הצליח', missingText: 'חסר'
 };
 const SIZE_LABELS = {title:'Title', lead:'Opening text', name:'Student name', classline:'Class line', thead:'Table headers', tbody:'Table scores', note:'Notes', sign:'Signature'};
 const DEFAULT_SIZES = {title:28, lead:16, name:30, classline:15, thead:15, tbody:16, note:13, sign:15};
@@ -71,7 +71,7 @@ const st = {
   sizes: Object.assign({}, DEFAULT_SIZES),
   printLetterhead: true,
   reportPresets: [],
-  dashboardThresholds: {absences:3, lates:3, low:70, high:85},
+  dashboardThresholds: {absences:3, lates:3, low:70, high:85, change:20},
   failBelow: 40   // on reports, a weekly score under this prints as "לא הצליח" ('' = off)
 };
 const assets = { letterheadDataUrl:null };
@@ -196,7 +196,7 @@ const monthById = id => st.months.find(m=>m.id===id);
 /* ---------------- shape / migration ---------------- */
 const classById = id => st.classes.find(c=>c.id===id);
 const staffById = id => st.staff.find(s=>s.id===id);
-const teacherOf = cls => staffById(cls && cls.teacherId);
+const teacherOf = cls => cls && cls.teacher ? {nameHe: cls.teacher} : null;   // the teacher's name is typed on the class
 const studentsOf = classId => st.students[classId] || [];
 function ensureClassShape(cls){ if(!cls.subjects || !cls.subjects.length) cls.subjects = defaultSubjects(); return cls; }
 function migrateStudentRecord(d){
@@ -300,16 +300,13 @@ function migrateLoadedState(){
   st.grades = st.grades || {};
   st.sheets = st.sheets || {};
   st.reportStatus = st.reportStatus || {};
-  // teachers typed on a class become staff
+  // a class has one (Hebrew) name and its teacher's name typed in; the old staff list fills in the teacher
   st.classes.forEach(c=>{
     ensureClassShape(c);
-    if(c.teacher && !c.teacherId){
-      let s = st.staff.find(x=>x.nameHe===c.teacher || x.nameEn===c.teacher);
-      if(!s){ s = {id:uid(), nameEn: isHeb(c.teacher)?'':c.teacher, nameHe: isHeb(c.teacher)?c.teacher:''}; st.staff.push(s); }
-      c.teacherId = s.id;
-    }
-    delete c.teacher;
-    if(c.nameHe===undefined){ if(isHeb(c.name)){ c.nameHe = c.name; c.name = ''; } else c.nameHe = ''; }
+    if(typeof c.teacher!=='string'){ const s = staffById(c.teacherId); c.teacher = s ? (s.nameHe || s.nameEn || '') : ''; }
+    delete c.teacherId;
+    if(!String(c.nameHe||'').trim()) c.nameHe = c.name || '';
+    delete c.name;
   });
   Object.keys(st.students).forEach(cid=> (st.students[cid]||[]).forEach(s=>{
     if(s.nameHe===undefined){ if(isHeb(s.name)){ s.nameHe = s.name; s.name = ''; } else s.nameHe = ''; }
@@ -329,7 +326,7 @@ function migrateLoadedState(){
   delete st.typography; delete st.customFonts; delete st.customFontData;
   st.reportPresets = Array.isArray(st.reportPresets) ? st.reportPresets : [];
   st.printLetterhead = st.printLetterhead!==false;
-  st.dashboardThresholds = Object.assign({absences:3, lates:3, low:70, high:85}, st.dashboardThresholds||{});
+  st.dashboardThresholds = Object.assign({absences:3, lates:3, low:70, high:85, change:20}, st.dashboardThresholds||{});
   if(st.failBelow===undefined) st.failBelow = 40;
   st.months.forEach(m=>{
     if(m.year){ m.year = normYear(m.year); return; }

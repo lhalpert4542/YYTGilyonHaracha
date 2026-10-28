@@ -33,10 +33,13 @@ function reportPageHtml(cls, month, s, rec, opt){
   let weekHtml = '';
   if(weekS.length){
     let rows = '';
+    // a week is on the report once the class has weekly scores for it; a blank score shows חסר
+    const filled = v => String(v ?? '').trim()!=='';
+    const classWeek = i => rec && Object.values(rec.perStudent||{}).some(x=> weekS.some(w=> filled(((x.week||{})[w.id]||[])[i])));
+    const miss = `<span class="miss">${esc(st.reportText.missingText||'חסר')}</span>`;
     for(let i=0;i<wc;i++){
-      const any = weekS.some(w=> ((d.week[w.id]||[])[i]||'')!=='');
-      if(!any && !String(typed[i]||'').trim()) continue;
-      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>`<td>${reportScore((d.week[w.id]||[])[i])}</td>`).join('')}</tr>`;
+      if(!classWeek(i) && !String(typed[i]||'').trim()) continue;
+      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{ const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v) : miss}</td>`; }).join('')}</tr>`;
     }
     if(!rows) rows = `<tr><td colspan="${weekS.length+1}">—</td></tr>`;
     weekHtml = `<table class="rtab"><tr><th>${esc(st.reportText.weekHeader)}</th>${weekS.map(w=>`<th>${esc(w.label)}</th>`).join('')}</tr>${rows}</table>`;
@@ -146,7 +149,7 @@ function renderReports(){
   const table = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students with scores</th><th></th></tr></thead><tbody>${classes.map(c=>{
       const n = studentsOf(c.id).length, rec = recFor(c.id, month.id), filled = rec ? studentsOf(c.id).filter(s=>hasAnyScore(rec.perStudent[s.id])).length : 0, dis = filled ? '' : 'disabled';
       const b = (act, icon, tip) => `<button type="button" class="icon-btn" data-ract="${act}" data-tip="${tip}" ${dis}>${ICON[icon]}</button>`;
-      return `<tr data-cid="${esc(c.id)}" class="click ${repSel&&repSel.classId===c.id?'sel':''}"><td>${esc(enName(c))} ${c.nameHe?`<span class="muted">· ${he(c.nameHe)}</span>`:''}</td><td>${he(heName(teacherOf(c)))}</td>
+      return `<tr data-cid="${esc(c.id)}" class="click ${repSel&&repSel.classId===c.id?'sel':''}"><td>${he(heName(c))}</td><td>${he(heName(teacherOf(c)))}</td>
         <td><span class="${filled===n?'':'muted'}">${filled}/${n}</span></td>
         <td class="act">${seg('Review', b('rview','view','View review sheet')+b('rprint','print','Print review sheet')+b('rpdf','download','Review sheet PDF'))}${seg('Reports', b('view','view','View reports')+b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">No classes with students</div>'}</div>` : '';
@@ -196,7 +199,7 @@ function renderRepPreview(){
 }
 
 /* ---------- Report Setup (Settings) ---------- */
-const REPORT_TEXT_FIELDS = [['title','Title'],['signature','Signature'],['lead','Opening text · {month}','full'],['classLine','Class line · {class} {teacher}','full'],['note','Note','full'],['scoreNote','Score note','full'],['weekHeader','Weekly column'],['lateHeader','Late'],['absentHeader','Absent'],['earlyHeader','Left early'],['failText','Weekly score below the limit']];
+const REPORT_TEXT_FIELDS = [['title','Title'],['signature','Signature'],['lead','Opening text · {month}','full'],['classLine','Class line · {class} {teacher}','full'],['note','Note','full'],['scoreNote','Score note','full'],['weekHeader','Weekly column'],['lateHeader','Late'],['absentHeader','Absent'],['earlyHeader','Left early'],['failText','Weekly score below the limit'],['missingText','Weekly score left blank']];
 let setupPv = {classId:'', sid:'', monthId:''};
 function renderReportSetup(box){
   const L = st.layout;

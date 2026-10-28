@@ -84,6 +84,25 @@ begin
   return v;
 end $$;
 
+-- Dashboard limits: anyone with access may change them (the principal uses a View login)
+create or replace function public.gilyon_set_dash(v jsonb) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare ver bigint; k text;
+begin
+  if public.gilyon_role() is null then raise exception 'No access'; end if;
+  if jsonb_typeof(v) <> 'object' then raise exception 'Bad limits'; end if;
+  for k in select jsonb_object_keys(v) loop
+    if k not in ('absences','lates','low','high','change') or jsonb_typeof(v->k) <> 'number' then raise exception 'Bad limit %', k; end if;
+  end loop;
+  insert into public.gilyon_state (id) values ('main') on conflict (id) do nothing;
+  update public.gilyon_state set data = jsonb_set(data, '{dashboardThresholds}', coalesce(data->'dashboardThresholds','{}'::jsonb) || v, true),
+    version = version + 1, updated_at = now(), updated_by = public.gilyon_email()
+  where id = 'main' returning version into ver;
+  return ver;
+end $$;
+revoke all on function public.gilyon_set_dash(jsonb) from public, anon;
+grant execute on function public.gilyon_set_dash(jsonb) to authenticated;
+
 -- Admin adds a person with a password (creates their login, no email needed)
 create or replace function public.gilyon_admin_create_user(new_email text, new_password text, new_role text)
 returns void language plpgsql security definer set search_path = public, extensions, auth as $$
