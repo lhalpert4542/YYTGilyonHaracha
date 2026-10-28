@@ -244,10 +244,9 @@ function renderAssessments(){
     const shab = mc.all.length ? `<div class="shab-row"><span class="lbl">שבתות</span>${mc.all.map((p,i)=>{
         const mv = movedSet.has(p), on = usedSet.has(p), off = !mv && !on;
         const tip = mv ? 'In week 5 of '+prevM.label : mc.skip.includes(i) ? 'Skipped – click to use this week' : off ? 'Not used – add week 5 to use it' : 'Click to skip this week';
-        return `<button type="button" class="shab ${off?'off':''} ${mv?'moved':''}" data-shab="${i}" ${ed?'':'disabled'} data-tip="${esc(tip)}">${mv?'↶ ':on?'✓ ':''}${esc(p)}</button>`; }).join('')}
-      <span class="hint" dir="ltr">Click a Shabbos to skip it · the weeks after it move up</span></div>` : '';
+        return `<button type="button" class="shab ${off?'off':''} ${mv?'moved':''}" data-shab="${i}" ${ed?'':'disabled'} data-tip="${esc(tip)}">${mv?'↶ ':on?'✓ ':''}${esc(p)}</button>`; }).join('')}</div>` : '';
     const w5 = ed ? (wc<5 ? `<button type="button" class="btn sec sm" data-w5="add">+ שבוע 5</button>` : `<button type="button" class="btn sec sm" data-w5="remove">× שבוע 5</button>`) : '';
-    parRow = `<div class="par-set" dir="rtl">${shab}<div class="wk-row"><span class="lbl">פרשיות</span>${Array.from({length:wc}, (_,w)=>`<label><span>שבוע ${w+1}</span><input type="text" class="parsha-all" data-idx="${w}" dir="rtl" value="${esc(par[w]||'')}" ${ed?'':'readonly'}></label>`).join('')}${w5}<span class="hint" dir="ltr">Edit any week · all classes</span></div></div>`;
+    parRow = `<div class="par-set" dir="rtl">${shab}<div class="wk-row"><span class="lbl">פרשיות</span>${Array.from({length:wc}, (_,w)=>`<label data-tip="שבוע ${w+1}"><span>${w+1}</span><input type="text" class="parsha-all" data-idx="${w}" dir="rtl" value="${esc(par[w]||'')}" ${ed?'':'readonly'}></label>`).join('')}${w5}</div></div>`;
   }
   const detail = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${parRow}
     ${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students</th><th>Sheet</th><th></th></tr></thead><tbody>${classes.map(c=>{

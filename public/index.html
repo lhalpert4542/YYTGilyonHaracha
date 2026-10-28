@@ -214,20 +214,18 @@
   .report-content .fail, .report-content .miss{font-size:.85em;}
   .fail-set{display:flex; align-items:center; gap:6px; flex-wrap:wrap; background:var(--accent-soft); border-radius:6px; padding:8px 10px; margin-bottom:12px; font-size:13px;}
   .fail-set input{width:62px; text-align:center; font-weight:700;}
-  .par-set{display:flex; flex-direction:column; gap:10px; background:var(--accent-soft); border-radius:6px; padding:10px 12px; margin-bottom:14px;}
-  .par-set .lbl{font-weight:700; font-size:14px; align-self:center;}
-  .par-set .wk-row, .par-set .shab-row{display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;}
-  .par-set .shab-row{align-items:center; gap:6px; padding-bottom:10px; border-bottom:1px solid var(--line);}
-  .par-set .lbl{min-width:52px;}
-  .shab{border:1.5px solid var(--accent); background:#fff; color:var(--accent-deep); border-radius:999px; padding:4px 12px; font:inherit; font-size:13.5px; font-weight:600; cursor:pointer;}
+  .par-set{display:flex; align-items:center; justify-content:space-between; gap:10px 18px; flex-wrap:wrap; background:var(--accent-soft); border-radius:6px; padding:8px 12px; margin-bottom:14px;}
+  .par-set .lbl{font-weight:700; font-size:13.5px; margin-left:4px;}
+  .par-set .wk-row, .par-set .shab-row{display:flex; align-items:center; gap:5px; flex-wrap:wrap;}
+  .par-set label{position:relative; display:block;}
+  .par-set label span{position:absolute; right:7px; top:50%; transform:translateY(-50%); font-size:11px; font-weight:700; color:var(--muted); pointer-events:none;}
+  .par-set input{width:90px; font-size:13px; font-weight:600; padding:4px 20px 4px 5px;}
+  .par-set .btn{padding:5px 10px;}
+  .shab{border:1.5px solid var(--accent); background:#fff; color:var(--accent-deep); border-radius:999px; padding:3px 9px; font:inherit; font-size:13px; font-weight:600; cursor:pointer;}
   .shab.off{border-style:dashed; border-color:var(--muted); color:var(--muted); background:transparent; text-decoration:line-through;}
   .shab:disabled{cursor:default;}
   .parsha-ro{font-size:13px; font-weight:700; color:var(--accent-deep); padding:3px 4px 1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .shab.moved{border-style:dashed; color:var(--muted);}
-  .par-set .wk-row .btn{align-self:flex-end;}
-  .par-set label{display:flex; flex-direction:column; gap:3px; font-size:11.5px; color:var(--muted);}
-  .par-set input{width:120px; font-size:14px; font-weight:600;}
-  .par-set .hint{font-size:12px; color:var(--muted); margin-right:auto; align-self:center;}
   .copy-mark{position:absolute; top:.35in; left:.45in; font-family:var(--font-body); font-size:10px; color:#999; direction:rtl;}
 
   /* audit */
@@ -269,7 +267,11 @@
   .drow .c{font-size:12px; color:var(--ink-soft);}
   .drow .sj{font-size:12px; color:var(--accent-deep); background:var(--accent-soft); border-radius:9px; padding:1px 8px;}
   .dash-cols.three{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr);}
-  .dash-cols.two{grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:14px;}
+  .dash-cols.one{grid-template-columns:minmax(0,1fr); margin-top:14px;}
+  .ins.chg{border-top-color:var(--accent);}
+  .ins.chg .pill{margin-left:4px;} .ins.chg .pill.up{background:var(--good-bg); color:var(--good);} .ins.chg .pill.down{background:var(--bad-bg); color:var(--bad);}
+  .ins.chg .dlist{display:block; columns:2; column-gap:28px;} .ins.chg .drow{break-inside:avoid; width:100%;}
+  @media (max-width:900px){ .ins.chg .dlist{columns:1;} }
   .drow .v{min-width:34px; text-align:center; font-weight:700; font-size:12px; border-radius:10px; padding:2px 6px;}
   .drow .v.bad{background:var(--bad-bg); color:var(--bad);} .drow .v.good{background:var(--good-bg); color:var(--good);} .drow .v.mid{background:var(--mid-bg); color:var(--mid);}
   .seg{display:inline-flex; align-items:center; gap:1px; border:1px solid var(--line); border-radius:6px; padding:0 2px 0 7px; margin-left:6px; background:#fff;}
@@ -1134,12 +1136,13 @@ function renderDashboard(){
     });
   }));
   low.sort((x,y)=>x.pct-y.pct);
-  const up = [], down = [];
-  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=> (cls.subjects||[]).forEach(sj=>{
+  const changed = [];
+  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=> (cls.subjects||[]).filter(sj=>sj.kind==='week').forEach(sj=>{
     const ch = subjChange(cls, s.id, sj); if(!ch || Math.abs(ch.diff) < T.change || T.change<=0) return;
-    (ch.diff>0 ? up : down).push({cls, s, sj, ch});
+    changed.push({cls, s, sj, ch});
   })));
-  up.sort((a,b)=>b.ch.diff-a.ch.diff); down.sort((a,b)=>a.ch.diff-b.ch.diff);
+  changed.sort((a,b)=> Math.abs(b.ch.diff)-Math.abs(a.ch.diff));
+  const nUp = changed.filter(r=>r.ch.diff>0).length, nDown = changed.length - nUp;
   const abs = all.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab);
   const lat = all.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
   const monthsWith = sortedMonths().filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id))).length;
@@ -1147,7 +1150,7 @@ function renderDashboard(){
   const fmt = r => r.sj.kind==='cat' ? (Math.round(r.a*10)/10).toString() : Math.round(r.a);
   const chg = r => (r.ch.diff>0?'▲ ':'▼ ')+Math.round(Math.abs(r.ch.diff));
   const chgTip = r => `${monthShort(r.ch.from.m.label)} ${Math.round(r.ch.from.v)} → ${monthShort(r.ch.to.m.label)} ${Math.round(r.ch.to.v)}`;
-  const list = (rows, val, klass, sub, tip) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}" ${tip?`data-tip="${esc(tip(r))}"`:''}><span class="v ${klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
+  const list = (rows, val, klass, sub, tip) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}" ${tip?`data-tip="${esc(tip(r))}"`:''}><span class="v ${typeof klass==='function'?klass(r):klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
   P.innerHTML = pageHead('Dashboard', `<span class="tag wait he" style="font-size:13px;">${esc(st.currentYear)}</span>`) + `
     <div class="stat-grid three">
       <div class="stat"><div class="n">${all.length}</div><div class="l">Students</div></div>
@@ -1159,9 +1162,8 @@ function renderDashboard(){
       <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2>${list(abs, r=>r.ab, 'bad')}</div>
       <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2>${list(lat, r=>r.la, 'mid')}</div>
     </div>
-    <div class="dash-cols two">
-      <div class="card ins high"><h2>Went up ${thr('change')} or more <span class="pill">${up.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Last month compared with the month before · out of 100</div>${list(up, chg, 'good', true, chgTip)}</div>
-      <div class="card ins low"><h2>Went down ${thr('change')} or more <span class="pill">${down.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Last month compared with the month before · out of 100</div>${list(down, chg, 'bad', true, chgTip)}</div>
+    <div class="dash-cols one">
+      <div class="card ins chg"><h2>Changed by ${thr('change')} or more <span class="pill up">▲ ${nUp}</span><span class="pill down">▼ ${nDown}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Weekly scores · last month's average compared with the month before · <span class="t-good">▲ went up</span> · <span class="t-bad">▼ went down</span></div>${list(changed, chg, r=> r.ch.diff>0 ? 'good' : 'bad', true, chgTip)}</div>
     </div>`;
   P.querySelectorAll('.thr').forEach(inp=> inp.addEventListener('change', ()=>{
     st.dashboardThresholds[inp.dataset.thr] = Math.max(0, Math.floor(Number(inp.value)||0));
@@ -1721,10 +1723,9 @@ function renderAssessments(){
     const shab = mc.all.length ? `<div class="shab-row"><span class="lbl">שבתות</span>${mc.all.map((p,i)=>{
         const mv = movedSet.has(p), on = usedSet.has(p), off = !mv && !on;
         const tip = mv ? 'In week 5 of '+prevM.label : mc.skip.includes(i) ? 'Skipped – click to use this week' : off ? 'Not used – add week 5 to use it' : 'Click to skip this week';
-        return `<button type="button" class="shab ${off?'off':''} ${mv?'moved':''}" data-shab="${i}" ${ed?'':'disabled'} data-tip="${esc(tip)}">${mv?'↶ ':on?'✓ ':''}${esc(p)}</button>`; }).join('')}
-      <span class="hint" dir="ltr">Click a Shabbos to skip it · the weeks after it move up</span></div>` : '';
+        return `<button type="button" class="shab ${off?'off':''} ${mv?'moved':''}" data-shab="${i}" ${ed?'':'disabled'} data-tip="${esc(tip)}">${mv?'↶ ':on?'✓ ':''}${esc(p)}</button>`; }).join('')}</div>` : '';
     const w5 = ed ? (wc<5 ? `<button type="button" class="btn sec sm" data-w5="add">+ שבוע 5</button>` : `<button type="button" class="btn sec sm" data-w5="remove">× שבוע 5</button>`) : '';
-    parRow = `<div class="par-set" dir="rtl">${shab}<div class="wk-row"><span class="lbl">פרשיות</span>${Array.from({length:wc}, (_,w)=>`<label><span>שבוע ${w+1}</span><input type="text" class="parsha-all" data-idx="${w}" dir="rtl" value="${esc(par[w]||'')}" ${ed?'':'readonly'}></label>`).join('')}${w5}<span class="hint" dir="ltr">Edit any week · all classes</span></div></div>`;
+    parRow = `<div class="par-set" dir="rtl">${shab}<div class="wk-row"><span class="lbl">פרשיות</span>${Array.from({length:wc}, (_,w)=>`<label data-tip="שבוע ${w+1}"><span>${w+1}</span><input type="text" class="parsha-all" data-idx="${w}" dir="rtl" value="${esc(par[w]||'')}" ${ed?'':'readonly'}></label>`).join('')}${w5}</div></div>`;
   }
   const detail = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${parRow}
     ${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students</th><th>Sheet</th><th></th></tr></thead><tbody>${classes.map(c=>{

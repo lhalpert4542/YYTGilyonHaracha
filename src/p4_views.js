@@ -123,12 +123,13 @@ function renderDashboard(){
     });
   }));
   low.sort((x,y)=>x.pct-y.pct);
-  const up = [], down = [];
-  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=> (cls.subjects||[]).forEach(sj=>{
+  const changed = [];
+  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=> (cls.subjects||[]).filter(sj=>sj.kind==='week').forEach(sj=>{
     const ch = subjChange(cls, s.id, sj); if(!ch || Math.abs(ch.diff) < T.change || T.change<=0) return;
-    (ch.diff>0 ? up : down).push({cls, s, sj, ch});
+    changed.push({cls, s, sj, ch});
   })));
-  up.sort((a,b)=>b.ch.diff-a.ch.diff); down.sort((a,b)=>a.ch.diff-b.ch.diff);
+  changed.sort((a,b)=> Math.abs(b.ch.diff)-Math.abs(a.ch.diff));
+  const nUp = changed.filter(r=>r.ch.diff>0).length, nDown = changed.length - nUp;
   const abs = all.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab);
   const lat = all.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
   const monthsWith = sortedMonths().filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id))).length;
@@ -136,7 +137,7 @@ function renderDashboard(){
   const fmt = r => r.sj.kind==='cat' ? (Math.round(r.a*10)/10).toString() : Math.round(r.a);
   const chg = r => (r.ch.diff>0?'▲ ':'▼ ')+Math.round(Math.abs(r.ch.diff));
   const chgTip = r => `${monthShort(r.ch.from.m.label)} ${Math.round(r.ch.from.v)} → ${monthShort(r.ch.to.m.label)} ${Math.round(r.ch.to.v)}`;
-  const list = (rows, val, klass, sub, tip) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}" ${tip?`data-tip="${esc(tip(r))}"`:''}><span class="v ${klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
+  const list = (rows, val, klass, sub, tip) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}" ${tip?`data-tip="${esc(tip(r))}"`:''}><span class="v ${typeof klass==='function'?klass(r):klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
   P.innerHTML = pageHead('Dashboard', `<span class="tag wait he" style="font-size:13px;">${esc(st.currentYear)}</span>`) + `
     <div class="stat-grid three">
       <div class="stat"><div class="n">${all.length}</div><div class="l">Students</div></div>
@@ -148,9 +149,8 @@ function renderDashboard(){
       <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2>${list(abs, r=>r.ab, 'bad')}</div>
       <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2>${list(lat, r=>r.la, 'mid')}</div>
     </div>
-    <div class="dash-cols two">
-      <div class="card ins high"><h2>Went up ${thr('change')} or more <span class="pill">${up.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Last month compared with the month before · out of 100</div>${list(up, chg, 'good', true, chgTip)}</div>
-      <div class="card ins low"><h2>Went down ${thr('change')} or more <span class="pill">${down.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Last month compared with the month before · out of 100</div>${list(down, chg, 'bad', true, chgTip)}</div>
+    <div class="dash-cols one">
+      <div class="card ins chg"><h2>Changed by ${thr('change')} or more <span class="pill up">▲ ${nUp}</span><span class="pill down">▼ ${nDown}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Weekly scores · last month's average compared with the month before · <span class="t-good">▲ went up</span> · <span class="t-bad">▼ went down</span></div>${list(changed, chg, r=> r.ch.diff>0 ? 'good' : 'bad', true, chgTip)}</div>
     </div>`;
   P.querySelectorAll('.thr').forEach(inp=> inp.addEventListener('change', ()=>{
     st.dashboardThresholds[inp.dataset.thr] = Math.max(0, Math.floor(Number(inp.value)||0));
