@@ -154,15 +154,42 @@ function addMonth(label, year){
 }
 function ensureYearMonths(y){
   const n = yearNum(y); if(!n) return;
-  HEB_MONTHS.forEach(mn=>{
-    const ys = hebYearStr(mn==='אלול' ? n-1 : n);
-    if(mn==='אדר' && isLeapYear(n)){
-      // leap year: two months. A plain "אדר" becomes אדר א (its scores stay with it).
-      const plain = st.months.find(m=>m.label==='אדר '+ys);
-      if(plain && !st.months.some(m=>m.label==='אדר א '+ys)) plain.label = 'אדר א '+ys;
-      addMonth('אדר א '+ys, y); addMonth('אדר ב '+ys, y);
-    } else addMonth(mn+' '+ys, y);
-  });
+  HEB_MONTHS.forEach(mn=>{ if(mn==='אדר') fixAdar(y, n); else addMonth(mn+' '+hebYearStr(mn==='אלול' ? n-1 : n), y); });
+}
+// does anything (scores, sheets, parsha changes) belong to this month?
+function monthUsed(m){
+  const filled = v => v && typeof v==='object' ? Object.values(v).some(filled) : String(v ?? '').trim()!=='';
+  return Object.keys(st.grades).some(k=> k.endsWith('::'+m.id) && (filled(st.grades[k].perStudent) || filled(st.grades[k].parshiot)))
+    || Object.keys(st.sheets).some(k=> k.endsWith('::'+m.id)) || (Array.isArray(m.skip) && m.skip.length>0);
+}
+function dropMonth(m){
+  Object.keys(st.grades).forEach(k=>{ if(k.endsWith('::'+m.id)) delete st.grades[k]; });
+  st.months.splice(st.months.indexOf(m), 1);
+}
+// leap year: אדר א + אדר ב; otherwise one אדר. Months already in use are never removed.
+function fixAdar(y, n){
+  const ys = hebYearStr(n), lbl = p => 'אדר'+(p===1?' א':p===2?' ב':'')+' '+ys;
+  const of = p => st.months.filter(m=> m.year===y && monthName(m.label)==='אדר' && adarPart(m.label)===p);
+  if(isLeapYear(n)){
+    let [plain, A, B] = [of(0), of(1), of(2)];
+    plain.forEach(m=>{
+      if(!A.length){ m.label = lbl(1); A = [m]; }
+      else if(!monthUsed(m)) dropMonth(m);
+      else if(!A.some(monthUsed)){ A.forEach(dropMonth); m.label = lbl(1); A = [m]; }
+      // both have scores: left as is so nothing is lost
+    });
+    if(!A.length) addMonth(lbl(1), y);
+    if(!B.length) addMonth(lbl(2), y);
+  } else {
+    let plain = of(0);
+    [...of(1), ...of(2)].forEach(m=>{
+      if(!plain.length && monthUsed(m)){ m.label = lbl(0); plain = [m]; }
+      else if(!monthUsed(m)) dropMonth(m);
+    });
+    if(!plain.length) addMonth(lbl(0), y);
+  }
+  // the same month listed twice (e.g. different quote marks): keep the one in use
+  [0,1,2].forEach(p=>{ const ms = of(p); if(ms.length>1) ms.filter(m=>!monthUsed(m)).slice(0, ms.length - Math.max(1, ms.filter(monthUsed).length)).forEach(dropMonth); });
 }
 const monthById = id => st.months.find(m=>m.id===id);
 
