@@ -194,7 +194,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
       <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · ${L.staffN>1?'המלמדים':'המלמד'} <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
     <table class="sh"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody></table>
-    <div class="sh-foot"><span>ציונים שבועיים 1–110 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים (ריק = 0)</span><span>ישיבה גדילת תורה</span></div></div>`;
+    <div class="sh-foot"><span>ציונים שבועיים 1–110 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים (ריק = 0)</span><span>ישיבה יגדיל תורה</span></div></div>`;
 }
 // filled copy built from today's scores (no QR – not for scanning)
 function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}, parshiotFor(cls.id, monthId)); }
