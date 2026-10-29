@@ -371,7 +371,7 @@ function buildSampleData(){
   const months = monthsOfYear(y);
   const FIRST = [['Moshe','משה'],['Dovid','דוד'],['Avrohom','אברהם'],['Yaakov','יעקב'],['Shlomo','שלמה'],['Yosef','יוסף'],['Chaim','חיים'],['Shmuel','שמואל'],['Aharon','אהרן'],['Menachem','מנחם'],['Naftali','נפתלי'],['Binyomin','בנימין'],['Yitzchok','יצחק'],['Eliyahu','אליהו'],['Tzvi','צבי'],['Yisroel','ישראל'],['Mordechai','מרדכי'],['Simcha','שמחה'],['Pinchas','פינחס'],['Asher','אשר'],['Meir','מאיר']];
   const LAST = [['Goldberg','גולדברג'],['Weiss','ווייס'],['Klein','קליין'],['Stern','שטרן'],['Berger','ברגר'],['Rosenberg','רוזנברג'],['Friedman','פרידמן'],['Landau','לאנדאו'],['Horowitz','הורוויץ'],['Cohen','כהן'],['Levi','לוי'],['Schwartz','שוורץ'],['Green','גרין'],['Lichtenstein','ליכטנשטיין'],['Eisenberg','אייזנבערג'],['Tannenbaum','טננבוים'],['Halpern','הלפרין'],['Rubin','רובין'],['Fischer','פישר'],['Berliner','ברלינר']];
-  const PAR = {'אלול':['שופטים','כי תצא','כי תבוא','נצבים־וילך'], 'תשרי':['האזינו','בראשית','נח','לך לך'], 'חשוון':['וירא','חיי שרה','תולדות','ויצא']};
+  const PAR = {'אלול':['שופטים','כי תצא','כי תבוא','נצבים־וילך'], 'תשרי':['האזינו','בראשית','נח','לך לך'], 'חשון':['וירא','חיי שרה','תולדות','ויצא']};
   const plan = [
     {en:'Aleph', heN:'א', t:['Yosef Berger','יוסף ברגר'], n:11, extra:{label:'כתיבה', kind:'cat'}, base:80},
     {en:'Beis', heN:'ב', t:['Yisroel Leifer','ישראל לייפער'], n:12, base:88},
@@ -392,7 +392,7 @@ function buildSampleData(){
     }
     months.forEach(m=>{
       const mn = monthName(m.label); if(!PAR[mn]) return;
-      const rec = getGradeRecord(cls.id, m.id), weeks = mn==='חשוון' ? 1 : 4, full = weeks===4;
+      const rec = getGradeRecord(cls.id, m.id), weeks = mn==='חשון' ? 1 : 4, full = weeks===4;
       kids.forEach(k=>{
         const d = rec.perStudent[k.s.id] = emptyStudentRecord(cls);
         d.chesarim = full ? String(Math.floor(R()*(2+k.absent))) : '';
