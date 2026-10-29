@@ -332,6 +332,7 @@ function migrateLoadedState(){
   st.printLetterhead = st.printLetterhead!==false;
   st.dashboardThresholds = Object.assign({absences:3, lates:3, low:70, high:85, change:20}, st.dashboardThresholds||{});
   if(st.failBelow===undefined) st.failBelow = 40;
+  st.classes.forEach(c=>{ if(c.failBelow===undefined) c.failBelow = st.failBelow; });   // each class has its own לא הצליח limit
   st.months.forEach(m=>{
     if(m.year){ m.year = normYear(m.year); return; }
     m.year = monthSchoolYear(m.label) || (m.label===SAMPLE_MONTH_LEGACY ? 'תשפ"ו' : '');

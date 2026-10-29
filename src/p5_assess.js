@@ -158,7 +158,7 @@ const SHEET_CSS = `
 .sheet table.sh{width:100%; border-collapse:collapse; table-layout:fixed;}
 .sheet table.sh th, .sheet table.sh td{border:1.2px solid #24434a; text-align:center; padding:1px 2px;}
 .sheet table.sh thead tr.g th{background:#0b4856; color:#fff; font-size:12px; font-weight:700; height:.3in;}
-.sheet table.sh thead tr.s th{background:#e6f0f1; color:#0b4856; font-size:11px; font-weight:700; overflow-wrap:anywhere; line-height:1.1; height:.32in;}
+.sheet table.sh thead tr.s th{background:#e6f0f1; color:#0b4856; font-size:10.5px; font-weight:700; word-break:keep-all; overflow-wrap:normal; hyphens:none; line-height:1.1; height:.32in; padding:1px 1px;}
 .sheet table.sh th.wk .p{display:block; font-weight:400; font-size:10px; margin-top:2px; color:#d9e8e8; text-align:center; padding:0 2px;}
 .sheet table.sh th.wk .p span{display:inline-block; width:62%; border-bottom:1px solid #d5aa4e; height:12px;}
 .sheet table.sh td.nm{text-align:right; padding-right:6px; white-space:nowrap; overflow:hidden; font-weight:600;}
@@ -184,7 +184,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
   let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
   if(catCols.length) g += `<th colspan="${catCols.length}" class="gs">ציונים חודשיים (1–10)</th>`;
   for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">${par[w] ? `<b class="pf">${esc(par[w])}</b>` : 'פרשה: <span></span>'}</span></th>`;
-  let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc(c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he)}</th>`).join('');
+  let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc((c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he).replace(/־/g,' '))}</th>`).join('');
   const body = L.rows.map((r,i)=>{
     const d = rec && rec.perStudent[r.sid];
     return `<tr style="height:${rowH}in;"><td class="no">${i+1}</td><td class="nm" style="font-size:${fs}px;">${esc(r.nameHe)}</td>${L.cols.map((c,ci)=>`<td class="${gs[ci]?'gs':''}${fill?' val':''}">${d ? esc(cellValue(d, c)||'') : ''}</td>`).join('')}</tr>`;
@@ -194,7 +194,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
       <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · ${L.staffN>1?'המלמדים':'המלמד'} <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
     <table class="sh"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody></table>
-    <div class="sh-foot"><span>ציונים שבועיים 1–110 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים</span><span>ישיבה גדילת תורה</span></div></div>`;
+    <div class="sh-foot"><span>ציונים שבועיים 1–110 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים (ריק = 0)</span><span>ישיבה גדילת תורה</span></div></div>`;
 }
 // filled copy built from today's scores (no QR – not for scanning)
 function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}, parshiotFor(cls.id, monthId)); }
@@ -405,7 +405,7 @@ Above each week's columns there is a line "פרשה:" where the teacher may have
 
 Rules:
 - Read every row's own handwriting separately. Never copy one row's numbers into another row.
-- A blank cell must be left out. Never guess a value for an empty box.
+- A blank cell must be left out. Never guess a value for an empty box. Blank attendance boxes (חסר, איחור, יצא מוקדם) mean zero – leave them out too, do not write 0.
 - Common confusions: 1 vs 7, 4 vs 9, 5 vs 6 vs 8, 0 vs 6. If you can read a number but are not fully sure, still give it and set "sure": false.
 - Numbers only (digits), no words.
 

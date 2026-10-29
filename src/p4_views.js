@@ -221,7 +221,7 @@ function findOrCreateClass(name, nameHe){
   if(!name && !nameHe) return null;
   const want = nameHe || name;
   let cls = st.classes.find(c=> c.nameHe===want || (name && c.nameHe===name));
-  if(!cls){ cls = {id:uid(), nameHe: want, teacher:'', subjects: defaultSubjects()}; st.classes.push(cls); st.students[cls.id] = []; }
+  if(!cls){ cls = {id:uid(), nameHe: want, teacher:'', subjects: defaultSubjects(), failBelow:40}; st.classes.push(cls); st.students[cls.id] = []; }
   return ensureClassShape(cls);
 }
 function findOrCreateStaff(nameEn, nameHe){

@@ -16,7 +16,7 @@ function sizeVars(){ return Object.keys(st.sizes).map(k=>`--r-${k}-size:${st.siz
 function reportText(key, ctx){ let t = String(st.reportText[key] ?? ''); Object.entries(ctx||{}).forEach(([k,v])=>{ t = t.split('{'+k+'}').join(v ?? ''); }); return t; }
 const rtHtml = (key, ctx) => esc(reportText(key, ctx)).replace(/\n/g,'<br>');
 // on reports, a weekly score under the limit in Settings prints as text instead of the number
-const failLimit = cls => { const own = cls && cls.failBelow; return (own!=='' && own!=null && !isNaN(Number(own))) ? Number(own) : st.failBelow; };
+const failLimit = cls => { const own = cls && cls.failBelow; return (own!=='' && own!=null && !isNaN(Number(own))) ? Number(own) : ''; };
 function reportScore(raw, cls){
   const v = String(raw ?? '').trim();
   if(v==='' || isNaN(Number(v))) return esc(v);

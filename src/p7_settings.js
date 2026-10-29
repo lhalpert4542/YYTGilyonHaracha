@@ -43,7 +43,7 @@ function renderClassesStaffTab(){
   const addClass = ()=>{
     const h = $('ncHe').value.trim(), t = $('ncT').value.trim(); if(!h){ $('ncHe').focus(); return; }
     if(st.classes.some(c=>c.nameHe===h)){ toast('That class already exists'); return; }
-    const c = {id:uid(), nameHe:h, teacher:t, subjects:defaultSubjects()};
+    const c = {id:uid(), nameHe:h, teacher:t, subjects:defaultSubjects(), failBelow:40};
     st.classes.push(c); csClassId = c.id;
     saveAll('Add class', h); renderClassesStaffTab(); $('ncHe').focus();
   };
@@ -70,15 +70,13 @@ function renderSubjCard(){
   const cls = classById(csClassId);
   if(!cls){ card.innerHTML = '<h2>Subjects</h2><div class="empty">Add a class first</div>'; return; }
   card.innerHTML = `<div class="card-head"><h2>Subjects · ${esc(classLabel(cls))}</h2><span class="sp"></span>${iconBtn('undo','Default subjects','id="sjReset"')}<button class="btn sec sm" id="sjCopy">Copy to all classes</button></div>
-    <div class="fail-set"><span><b class="he">${esc(heName(cls))}</b>: weekly scores below <input type="number" id="failCls" min="0" max="110" value="${esc(cls.failBelow ?? '')}" placeholder="${esc(st.failBelow ?? '')}"> show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b></span>
-      <span class="muted small" style="margin-left:auto;">Other classes <input type="number" id="failBelow" min="0" max="110" value="${esc(st.failBelow ?? '')}" style="width:54px;"></span></div>
+    <div class="fail-set"><span>Weekly scores below <input type="number" id="failCls" min="0" max="110" value="${esc(cls.failBelow ?? '')}" placeholder="off"> show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b></span></div>
     <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly (1–110)</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
     <table class="t"><thead><tr><th>Subject</th><th style="width:1%;">Type</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
       <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (1–110)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
       <td class="act">${iconBtn('trash','Remove','data-del','danger')}</td></tr>`).join('')}</tbody></table>`;
   const add = ()=>{ const v = $('sjNew').value.trim(); if(!v){ $('sjNew').focus(); return; } if(cls.subjects.some(s=>s.label===v)){ toast('Already there'); return; } cls.subjects.push({id:uid(), label:v, kind:$('sjKind').value}); saveAll('Add subject', v+' · '+enName(cls)); renderSubjCard(); $('sjNew').focus(); };
-  $('failCls').onchange = e=>{ const v = e.target.value.trim(); if(v==='') delete cls.failBelow; else cls.failBelow = Math.max(0, Math.min(WEEK_MAX, Number(v)||0)); e.target.value = cls.failBelow ?? ''; saveAll('Report limit', heName(cls)+' · '+(v===''?'default':String(cls.failBelow))); };
-  $('failBelow').onchange = e=>{ const v = e.target.value.trim(); st.failBelow = v==='' ? '' : Math.max(0, Math.min(WEEK_MAX, Number(v)||0)); e.target.value = st.failBelow; saveAll('Report limit', v===''?'off':String(st.failBelow)); };
+  $('failCls').onchange = e=>{ const v = e.target.value.trim(); if(v==='') cls.failBelow = ''; else cls.failBelow = Math.max(0, Math.min(WEEK_MAX, Number(v)||0)); e.target.value = cls.failBelow ?? ''; saveAll('Report limit', heName(cls)+' · '+(v===''?'off':String(cls.failBelow))); };
   $('sjAdd').onclick = add; $('sjNew').addEventListener('keydown', e=>{ if(e.key==='Enter') add(); });
   $('sjReset').onclick = async ()=>{ if(!await askConfirm('Reset subjects for '+enName(cls)+'?', '', 'Reset', '')) return; cls.subjects = defaultSubjects(); saveAll('Reset subjects', enName(cls)); doneWithUndo('Subjects reset'); renderSubjCard(); };
   $('sjCopy').onclick = async ()=>{ if(!await askConfirm('Copy these subjects to every class?', 'Each class gets this same list.', 'Copy', '')) return; st.classes.forEach(c=>{ if(c!==cls) c.subjects = clone(cls.subjects); }); saveAll('Copy subjects to all classes', enName(cls)); doneWithUndo('Subjects copied'); };
@@ -382,7 +380,7 @@ function buildSampleData(){
   const clamp = (v,a,b)=>Math.max(a, Math.min(b, v));
   plan.forEach(p=>{
     if(st.classes.some(c=>c.nameHe===p.heN)) return;
-    const cls = {id:uid(), nameHe:p.heN, teacher:p.t[1], subjects:defaultSubjects(), isSample:true};
+    const cls = {id:uid(), nameHe:p.heN, teacher:p.t[1], subjects:defaultSubjects(), failBelow:40, isSample:true};
     if(p.extra) cls.subjects.push({id:uid(), label:p.extra.label, kind:p.extra.kind});
     st.classes.push(cls); st.students[cls.id] = [];
     const used = new Set(), kids = [];

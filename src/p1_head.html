@@ -155,6 +155,25 @@
   table.entry td.unsure{background:var(--mid-bg);}
   table.entry td.unsure input{color:var(--mid); font-weight:700;}
   table.entry td input::placeholder{color:#b8c6c8;}
+  /* Scores table: compact, striped, easy to follow (about 22 students fit on screen) */
+  #scGrid .grid-wrap{border-color:#d3dfe1; box-shadow:0 1px 3px rgba(11,72,86,.06);}
+  #scGrid table.entry{font-size:14px; width:100%;}
+  #scGrid table.entry th, #scGrid table.entry td{border-color:#e3eaeb;}
+  #scGrid table.entry thead tr.grp th{background:var(--accent-deep); color:#fff; font-size:13px; font-weight:700; padding:3px 6px; line-height:1.2; border-color:rgba(255,255,255,.18);}
+  #scGrid table.entry thead tr.grp th .parsha-ro{color:#f3dfa9; font-weight:600; padding:1px 4px 0;}
+  #scGrid table.entry thead tr:not(.grp) th{background:#e8f0f1; color:var(--accent-deep); font-size:12.5px; font-weight:700; padding:3px 4px;}
+  #scGrid table.entry thead tr.grp th:first-child{background:var(--accent-deep); color:#fff; font-size:14px;}
+  #scGrid table.entry td{padding:0;}
+  #scGrid table.entry td input{width:100%; min-width:42px; padding:3px 2px; font-size:14px; line-height:1.25; font-weight:500; color:#183a40;}
+  #scGrid table.entry td.name{padding:2px 12px; font-size:14px; font-weight:600; min-width:160px; background:#fff;}
+  #scGrid table.entry tbody tr:nth-child(even) td{background:#f5f9f9;}
+  #scGrid table.entry tbody tr:hover td{background:#e9f3f4;}
+  #scGrid table.entry tbody tr:focus-within td{background:#e1eff1;}
+  #scGrid table.entry tbody tr:focus-within td.name{color:var(--accent-deep); box-shadow:inset -3px 0 0 var(--accent);}
+  #scGrid table.entry tbody tr td.bad{background:var(--bad-bg);}
+  #scGrid table.entry tbody tr td.insel{background:#cfe3e6;}
+  #scGrid table.entry td input:focus{outline:2px solid var(--accent); outline-offset:-2px; background:#fffbe9; border-radius:2px;}
+  #scGrid table.entry .gs{border-inline-start:2px solid var(--accent-deep)!important;}
   .wk-btn{border:1px solid var(--line); background:#fff; color:var(--accent-deep); border-radius:4px; width:20px; height:20px; padding:0; cursor:pointer; font-size:14px; line-height:1; display:inline-flex; align-items:center; justify-content:center;}
 
   /* assessments */
