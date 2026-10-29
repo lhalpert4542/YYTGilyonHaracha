@@ -114,7 +114,7 @@ function sheetLayout(cls, monthId){
     rows: sortedStudents(cls.id).map(s=>({sid:s.id, nameHe: heName(s)})),
     cols: buildColumnDefs(cls, wc).map(d=>({type:d.type, id:d.id, week:d.week, he:d.he})),
     weekCount: wc,
-    classHe: heName(cls), teacherHe: heName(teacherOf(cls))
+    classHe: heName(cls), teacherHe: heName(teacherOf(cls)), staffN: staffNames(cls).length
   };
 }
 const layoutSig = l => hashStr(JSON.stringify(l));
@@ -192,9 +192,9 @@ function sheetHtml(sh, monthLabel, fill, parsh){
   const right = fill ? `<div class="sh-review">לבדיקת המלמד</div>` : `<div class="sh-code">${qrImg(sh.code+'-P1')}${esc(sh.code+'-P1')}</div>`;
   return `<div class="sheet">${fill?'':'<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>'}
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
-      <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · המלמד <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
+      <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · ${L.staffN>1?'המלמדים':'המלמד'} <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
     <table class="sh"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody></table>
-    <div class="sh-foot"><span>ציונים שבועיים 0–100 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים</span><span>ישיבה גדילת תורה</span></div></div>`;
+    <div class="sh-foot"><span>ציונים שבועיים 1–110 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים</span><span>ישיבה גדילת תורה</span></div></div>`;
 }
 // filled copy built from today's scores (no QR – not for scanning)
 function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}, parshiotFor(cls.id, monthId)); }
@@ -387,7 +387,7 @@ function colDescription(c){
   if(c.type==='ichurim') return 'Late (איחור) – number of times, whole number';
   if(c.type==='yatza') return 'Left early (יצא מוקדם) – number of times, whole number';
   if(c.type==='cat') return `monthly score "${c.he}" – a number from 1 to 10`;
-  return `week ${c.week+1}, "${c.he}" – a score from 0 to 100`;
+  return `week ${c.week+1}, "${c.he}" – a score from 1 to 110`;
 }
 async function aiReadSheet(canvas, sh, page){
   const L = sh.layout, rows = L.rows.slice((page-1)*ROWS_PER_PAGE, page*ROWS_PER_PAGE);

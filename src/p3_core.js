@@ -196,7 +196,11 @@ const monthById = id => st.months.find(m=>m.id===id);
 /* ---------------- shape / migration ---------------- */
 const classById = id => st.classes.find(c=>c.id===id);
 const staffById = id => st.staff.find(s=>s.id===id);
-const teacherOf = cls => cls && cls.teacher ? {nameHe: cls.teacher} : null;   // the teacher's name is typed on the class
+const WEEK_MAX = 110;   // weekly test marks go up to 110
+// up to 3 staff names typed on the class: teacher, teacher2, teacher3
+const staffNames = cls => cls ? [cls.teacher, cls.teacher2, cls.teacher3].map(x=>String(x||'').trim()).filter(Boolean) : [];
+const joinHe = a => a.length<2 ? (a[0]||'') : a.slice(0,-1).join(', ') + ' ו' + a[a.length-1];
+const teacherOf = cls => { const n = staffNames(cls); return n.length ? {nameHe: joinHe(n), count: n.length} : null; };
 const studentsOf = classId => st.students[classId] || [];
 function ensureClassShape(cls){ if(!cls.subjects || !cls.subjects.length) cls.subjects = defaultSubjects(); return cls; }
 function migrateStudentRecord(d){

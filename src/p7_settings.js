@@ -26,7 +26,7 @@ function renderYearTab(){
   };
 }
 
-/* ---------- Classes (name in Hebrew, teacher typed in) ---------- */
+/* ---------- Classes (name in Hebrew, up to 3 staff typed in) ---------- */
 let csClassId = '';
 function renderClassesStaffTab(){
   const box = $('stBody');
@@ -34,8 +34,8 @@ function renderClassesStaffTab(){
   box.innerHTML = `<div class="cs-grid">
     <div class="card"><div class="card-head"><h2>Classes</h2><span class="pill">${st.classes.length}</span></div>
       <div class="row" style="margin-bottom:12px;"><input type="text" id="ncHe" dir="rtl" placeholder="כתה" style="flex:1 1 90px;"><input type="text" id="ncT" dir="rtl" placeholder="מלמד" style="flex:2 1 160px;"><button class="btn" id="ncAdd">${ICON.plus}Add</button></div>
-      ${st.classes.length ? `<table class="t"><thead><tr><th style="width:28%;">Class</th><th>Teacher</th><th style="width:1%;">Students</th><th style="width:1%;"></th></tr></thead><tbody>${st.classes.map(c=>`<tr data-cid="${esc(c.id)}" class="click ${c.id===csClassId?'sel':''}">
-        <td><input type="text" dir="rtl" data-f="nameHe" value="${esc(c.nameHe||'')}"></td><td><input type="text" dir="rtl" data-f="teacher" value="${esc(c.teacher||'')}"></td>
+      ${st.classes.length ? `<table class="t"><thead><tr><th style="width:20%;">Class</th><th>Staff <span class="muted small" style="font-weight:400;">· up to 3</span></th><th style="width:1%;">Students</th><th style="width:1%;"></th></tr></thead><tbody>${st.classes.map(c=>`<tr data-cid="${esc(c.id)}" class="click ${c.id===csClassId?'sel':''}">
+        <td><input type="text" dir="rtl" data-f="nameHe" value="${esc(c.nameHe||'')}"></td><td><div class="staff3" dir="rtl">${['teacher','teacher2','teacher3'].map(k=>`<input type="text" dir="rtl" data-f="${k}" value="${esc(c[k]||'')}" placeholder="${k==='teacher'?'מלמד':'—'}">`).join('')}</div></td>
         <td style="text-align:center;">${studentsOf(c.id).length}</td><td class="act">${iconBtn('trash','Delete class','data-del','danger')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No classes yet</div>'}
     </div>
     <div class="card" id="subjCard"></div>
@@ -54,7 +54,7 @@ function renderClassesStaffTab(){
     tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{
       const v = inp.value.trim();
       if(inp.dataset.f==='nameHe' && (!v || st.classes.some(x=>x!==c && x.nameHe===v))){ toast(v ? 'That class already exists' : 'Enter the class name'); inp.value = c.nameHe; return; }
-      c[inp.dataset.f] = v; saveAll(inp.dataset.f==='teacher' ? 'Edit teacher' : 'Edit class', heName(c)); renderSubjCard();
+      c[inp.dataset.f] = v; saveAll(inp.dataset.f==='nameHe' ? 'Edit class' : 'Edit staff', heName(c)); renderSubjCard();
     }));
     tr.querySelector('[data-del]').onclick = async ()=>{
       if(!await askConfirm('Delete class '+heName(c)+'?', 'Its students, scores, sheets and report status are removed.')) return;
@@ -70,13 +70,15 @@ function renderSubjCard(){
   const cls = classById(csClassId);
   if(!cls){ card.innerHTML = '<h2>Subjects</h2><div class="empty">Add a class first</div>'; return; }
   card.innerHTML = `<div class="card-head"><h2>Subjects · ${esc(classLabel(cls))}</h2><span class="sp"></span>${iconBtn('undo','Default subjects','id="sjReset"')}<button class="btn sec sm" id="sjCopy">Copy to all classes</button></div>
-    <div class="fail-set">Weekly scores below <input type="number" id="failBelow" min="0" max="100" value="${esc(st.failBelow ?? '')}"> show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b> on reports <span class="muted small">· all classes</span></div>
-    <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly (0–100)</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
+    <div class="fail-set"><span><b class="he">${esc(heName(cls))}</b>: weekly scores below <input type="number" id="failCls" min="0" max="110" value="${esc(cls.failBelow ?? '')}" placeholder="${esc(st.failBelow ?? '')}"> show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b></span>
+      <span class="muted small" style="margin-left:auto;">Other classes <input type="number" id="failBelow" min="0" max="110" value="${esc(st.failBelow ?? '')}" style="width:54px;"></span></div>
+    <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly (1–110)</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
     <table class="t"><thead><tr><th>Subject</th><th style="width:1%;">Type</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
-      <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (0–100)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
+      <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (1–110)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
       <td class="act">${iconBtn('trash','Remove','data-del','danger')}</td></tr>`).join('')}</tbody></table>`;
   const add = ()=>{ const v = $('sjNew').value.trim(); if(!v){ $('sjNew').focus(); return; } if(cls.subjects.some(s=>s.label===v)){ toast('Already there'); return; } cls.subjects.push({id:uid(), label:v, kind:$('sjKind').value}); saveAll('Add subject', v+' · '+enName(cls)); renderSubjCard(); $('sjNew').focus(); };
-  $('failBelow').onchange = e=>{ const v = e.target.value.trim(); st.failBelow = v==='' ? '' : Math.max(0, Math.min(100, Number(v)||0)); e.target.value = st.failBelow; saveAll('Report limit', v===''?'off':String(st.failBelow)); };
+  $('failCls').onchange = e=>{ const v = e.target.value.trim(); if(v==='') delete cls.failBelow; else cls.failBelow = Math.max(0, Math.min(WEEK_MAX, Number(v)||0)); e.target.value = cls.failBelow ?? ''; saveAll('Report limit', heName(cls)+' · '+(v===''?'default':String(cls.failBelow))); };
+  $('failBelow').onchange = e=>{ const v = e.target.value.trim(); st.failBelow = v==='' ? '' : Math.max(0, Math.min(WEEK_MAX, Number(v)||0)); e.target.value = st.failBelow; saveAll('Report limit', v===''?'off':String(st.failBelow)); };
   $('sjAdd').onclick = add; $('sjNew').addEventListener('keydown', e=>{ if(e.key==='Enter') add(); });
   $('sjReset').onclick = async ()=>{ if(!await askConfirm('Reset subjects for '+enName(cls)+'?', '', 'Reset', '')) return; cls.subjects = defaultSubjects(); saveAll('Reset subjects', enName(cls)); doneWithUndo('Subjects reset'); renderSubjCard(); };
   $('sjCopy').onclick = async ()=>{ if(!await askConfirm('Copy these subjects to every class?', 'Each class gets this same list.', 'Copy', '')) return; st.classes.forEach(c=>{ if(c!==cls) c.subjects = clone(cls.subjects); }); saveAll('Copy subjects to all classes', enName(cls)); doneWithUndo('Subjects copied'); };
@@ -169,7 +171,7 @@ function renderUsersTab(){
 /* ---------- Backup / Data ---------- */
 const normH = h => String(h||'').toLowerCase().replace(/[־\-_]/g,' ').replace(/\s+/g,' ').trim();
 const H = {
-  clsEn:['class','class name'], clsHe:['כתה','כיתה'], tEn:['teacher','teacher name'], tHe:['מלמד','שם המלמד'],
+  clsEn:['class','class name'], clsHe:['כתה','כיתה'], tEn:['teacher','teacher name'], tHe:['מלמד','שם המלמד'], t2:['מלמד 2'], t3:['מלמד 3'],
   sEn:['student','student name','name','english name'], sHe:['שם התלמיד','תלמיד','שם'],
   chesarim:['חסר','חסרים','absent','absences'], ichurim:['איחור','איחורים','late','lates'], yatza:['יצא מוקדם','left early']
 };
@@ -186,6 +188,7 @@ function importRows(rows, monthId, studentsOnly){
     const before = st.classes.length, cls = findOrCreateClass(cEn, cHe); if(st.classes.length>before) newClasses++;
     const tEn = pick(row, H.tEn), tHe = pick(row, H.tHe);
     if((tEn || tHe) && !cls.teacher) cls.teacher = tHe || tEn;
+    ['t2','t3'].forEach((k,i)=>{ const v = pick(row, H[k]); if(v && !cls['teacher'+(i+2)]) cls['teacher'+(i+2)] = v; });
     const sEn = pick(row, H.sEn), sHe = pick(row, H.sHe); if(!sEn && !sHe) return;
     const nb = studentsOf(cls.id).length, s = findOrCreateStudent(cls.id, sEn, sHe); if(studentsOf(cls.id).length>nb) newStudents++;
     if(studentsOnly || !month) return;
@@ -211,9 +214,9 @@ function monthHeaders(monthId){
   const catL = [], weekL = []; let wc = 4;
   st.classes.forEach(c=>{ c.subjects.forEach(s=>{ const arr = s.kind==='cat' ? catL : weekL; if(!arr.includes(s.label)) arr.push(s.label); }); const r = recFor(c.id, monthId); if(r && r.weekCount===5) wc = 5; });
   const weekCols = []; for(let w=1; w<=wc; w++) weekL.forEach(l=> weekCols.push(l+' '+w));
-  return {headers:['כתה','מלמד','Student','שם התלמיד','חסר','איחור','יצא מוקדם', ...catL, ...weekCols], wc};
+  return {headers:['כתה','מלמד','מלמד 2','מלמד 3','Student','שם התלמיד','חסר','איחור','יצא מוקדם', ...catL, ...weekCols], wc};
 }
-function baseRow(c, s){ return {'כתה':heName(c), 'מלמד':c.teacher||'', 'Student':s?s.name||'':'', 'שם התלמיד':s?s.nameHe||'':''}; }
+function baseRow(c, s){ return {'כתה':heName(c), 'מלמד':c.teacher||'', 'מלמד 2':c.teacher2||'', 'מלמד 3':c.teacher3||'', 'Student':s?s.name||'':'', 'שם התלמיד':s?s.nameHe||'':''}; }
 function monthRows(monthId){
   const {headers, wc} = monthHeaders(monthId), rows = [];
   st.classes.forEach(cls=>{ const rec = recFor(cls.id, monthId); studentsOf(cls.id).forEach(s=>{

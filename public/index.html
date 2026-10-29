@@ -147,6 +147,10 @@
   table.entry td input{width:50px; border:none; text-align:center; padding:6px 2px; font-size:13px; background:transparent; font-family:var(--font-body);}
   table.entry td input:focus{outline:2px solid var(--accent); background:var(--cell-focus);}
   table.entry td.bad{background:var(--bad-bg);}
+  .stu-link{color:inherit; text-decoration:none;} .stu-link:hover{color:var(--accent); text-decoration:underline;}
+  table.entry td.insel, table.entry td.insel.bad{background:#cfe3e6; box-shadow:inset 0 0 0 1px var(--accent);}
+  .has-sel table.entry td.insel input:focus{outline:none; background:transparent;}
+  table.entry td.insel input::selection{background:transparent;}
   table.entry td.bad input{color:var(--bad); font-weight:700;}
   table.entry td.unsure{background:var(--mid-bg);}
   table.entry td.unsure input{color:var(--mid); font-weight:700;}
@@ -214,6 +218,7 @@
   .report-content .fail, .report-content .miss{font-size:.85em;}
   .fail-set{display:flex; align-items:center; gap:6px; flex-wrap:wrap; background:var(--accent-soft); border-radius:6px; padding:8px 10px; margin-bottom:12px; font-size:13px;}
   .fail-set input{width:62px; text-align:center; font-weight:700;}
+  .staff3{display:flex; gap:4px;} .staff3 input{flex:1 1 0; min-width:0;}
   .par-set{display:flex; align-items:center; justify-content:space-between; gap:10px 18px; flex-wrap:wrap; background:var(--accent-soft); border-radius:6px; padding:8px 12px; margin-bottom:14px;}
   .par-set .lbl{font-weight:700; font-size:13.5px; margin-left:4px;}
   .par-set .wk-row, .par-set .shab-row{display:flex; align-items:center; gap:5px; flex-wrap:wrap;}
@@ -535,7 +540,11 @@ const monthById = id => st.months.find(m=>m.id===id);
 /* ---------------- shape / migration ---------------- */
 const classById = id => st.classes.find(c=>c.id===id);
 const staffById = id => st.staff.find(s=>s.id===id);
-const teacherOf = cls => cls && cls.teacher ? {nameHe: cls.teacher} : null;   // the teacher's name is typed on the class
+const WEEK_MAX = 110;   // weekly test marks go up to 110
+// up to 3 staff names typed on the class: teacher, teacher2, teacher3
+const staffNames = cls => cls ? [cls.teacher, cls.teacher2, cls.teacher3].map(x=>String(x||'').trim()).filter(Boolean) : [];
+const joinHe = a => a.length<2 ? (a[0]||'') : a.slice(0,-1).join(', ') + ' ו' + a[a.length-1];
+const teacherOf = cls => { const n = staffNames(cls); return n.length ? {nameHe: joinHe(n), count: n.length} : null; };
 const studentsOf = classId => st.students[classId] || [];
 function ensureClassShape(cls){ if(!cls.subjects || !cls.subjects.length) cls.subjects = defaultSubjects(); return cls; }
 function migrateStudentRecord(d){
@@ -1176,8 +1185,9 @@ function renderDashboard(){
    Student profile – scores by month and reports (like Kriah)
    ===================================================================== */
 let profile = null;   // {classId, sid}
-function openProfile(classId, sid){ profile = {classId, sid}; activateTab('profile'); }
+function openProfile(classId, sid){ profile = {classId, sid, from: activeTab==='profile' ? (profile && profile.from) : activeTab}; activateTab('profile'); }
 const openStudentReport = openProfile;
+const backTab = () => { const f = profile && profile.from; return ['scores','students','dashboard'].includes(f) ? f : (canEdit() ? 'students' : 'dashboard'); };
 function renderProfile(){
   const P = $('panel-profile'), cls = profile && classById(profile.classId), s = cls && studentsOf(cls.id).find(x=>x.id===profile.sid);
   if(!s){ P.innerHTML = '<div class="empty">Student not found</div>'; return; }
@@ -1190,13 +1200,13 @@ function renderProfile(){
     return {m, rec, d, avg: studentOverallAvg(d, cls, rec.weekCount), wAvg};
   });
   const T = st.dashboardThresholds, tone = v => v===null ? '' : v < T.low ? 'bad-cell' : v >= T.high ? 'good-cell' : '';
-  const trend = rows.length ? `<div class="trend">${rows.map(r=>{ const v = r.avg===null ? 0 : Math.round(r.avg); return `<div class="tb"><div class="bar-wrap"><div class="bar ${v<T.low?'b':v>=T.high?'g':''}" style="height:${Math.max(4,v)}%"></div></div><b>${r.avg===null?'—':v}</b><span class="he">${esc(monthShort(r.m.label))}</span></div>`; }).join('')}</div>` : '<div class="empty">No scores yet</div>';
+  const trend = rows.length ? `<div class="trend">${rows.map(r=>{ const v = r.avg===null ? 0 : Math.round(r.avg); return `<div class="tb"><div class="bar-wrap"><div class="bar ${v<T.low?'b':v>=T.high?'g':''}" style="height:${Math.min(100, Math.max(4,v))}%"></div></div><b>${r.avg===null?'—':v}</b><span class="he">${esc(monthShort(r.m.label))}</span></div>`; }).join('')}</div>` : '<div class="empty">No scores yet</div>';
   const head = `<tr class="grp"><th rowspan="2">חודש</th><th colspan="3" class="gs">נוכחות</th>${catS.length?`<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`:''}${weekS.length?`<th colspan="${weekS.length}" class="gs">ממוצע שבועי</th>`:''}<th rowspan="2" class="gs">ממוצע</th></tr>
     <tr><th class="gs">חסר</th><th>איחור</th><th>יצא מוקדם</th>${catS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}${weekS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}</tr>`;
   const body = rows.map(r=>`<tr class="click" data-m="${r.m.id}"><td class="name">${esc(r.m.label)}</td><td class="gs">${esc(r.d.chesarim)}</td><td>${esc(r.d.ichurim)}</td><td>${esc(r.d.yatza)}</td>
     ${catS.map((x,i)=>`<td class="${i===0?'gs':''}">${esc(r.d.cat[x.id]||'')}</td>`).join('')}${weekS.map((x,i)=>{ const a = r.wAvg(x); return `<td class="${i===0?'gs':''}">${a===null?'':Math.round(a)}</td>`; }).join('')}
     <td class="gs ${tone(r.avg)}">${r.avg===null?'':Math.round(r.avg)}</td></tr>`).join('');
-  P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}${canEdit()?'Students':'Dashboard'}</button><span class="sp"></span><button class="btn sec" id="pfEdit">${canEdit()?ICON.edit+'Edit scores':'Scores'}</button></div>
+  P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}${({scores:'Scores', students:'Students', dashboard:'Dashboard'})[backTab()]}</button><span class="sp"></span><button class="btn sec" id="pfEdit">${canEdit()?ICON.edit+'Edit scores':'Scores'}</button></div>
     <div class="card pf-head"><div><div class="pf-name he">${esc(heName(s))}</div><div class="muted">${esc(s.name||'')}</div></div>
       <div class="pf-meta"><div><span class="muted small">Class</span><b>${esc(classLabel(cls))}</b></div><div><span class="muted small">Teacher</span><b class="he">${esc(heName(teacherOf(cls))||'—')}</b></div></div></div>
     <div class="stat-grid">
@@ -1208,7 +1218,7 @@ function renderProfile(){
     <div class="card"><h2>Average by month</h2>${trend}</div>
     <div class="card"><h2>Scores</h2>${rows.length ? `<div class="grid-wrap" dir="rtl"><table class="entry rtl pf-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>` : '<div class="empty">No scores yet</div>'}</div>
     <div class="card"><h2>Reports</h2>${rows.length ? `<table class="t"><tbody>${rows.map(r=>`<tr data-m="${r.m.id}"><td>${he(r.m.label)}</td><td class="act">${iconBtn('view','Preview','data-pr="view"')}${iconBtn('print','Print','data-pr="print"')}${iconBtn('download','Download PDF','data-pr="pdf"')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No reports yet</div>'}</div>`;
-  $('pfBack').onclick = ()=>{ stuFilter = cls.id; activateTab(canEdit() ? 'students' : 'dashboard'); };
+  $('pfBack').onclick = ()=>{ const t = backTab(); if(t==='students') stuFilter = cls.id; activateTab(t); };
   $('pfEdit').onclick = ()=>{ scoreClassId = cls.id; scoreMonthId = (months[months.length-1]||{}).id || ''; activateTab('scores'); };
   P.querySelectorAll('.pf-table tr.click').forEach(tr=> tr.onclick = ()=>{ scoreClassId = cls.id; scoreMonthId = tr.dataset.m; activateTab('scores'); });
   P.querySelectorAll('[data-pr]').forEach(b=> b.onclick = ()=>{
@@ -1403,7 +1413,7 @@ function validCell(def, raw){
   const v = String(raw??'').trim(); if(v==='') return true;
   const n = Number(v); if(isNaN(n)) return false;
   if(def.type==='cat') return n>=1 && n<=10;
-  if(def.type==='week') return n>=0 && n<=100;
+  if(def.type==='week') return n>=0 && n<=WEEK_MAX;
   return Number.isInteger(n) && n>=0 && n<=31;
 }
 function cellValue(d, def){ if(def.type==='cat') return (d.cat||{})[def.id]; if(def.type==='week') return ((d.week||{})[def.id]||[])[def.week]; return d[def.type]; }
@@ -1445,9 +1455,10 @@ function renderScoresGrid(){
     students.length ? students.map((s,r)=>{
       if(!rec.perStudent[s.id]) rec.perStudent[s.id] = emptyStudentRecord(cls);
       const d = ensureRecordShape(rec.perStudent[s.id], cls);
-      return `<tr><td class="name">${esc(heName(s))}</td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}" ${ro?'readonly tabindex="-1"':''}></td>`; }).join('') + '</tr>';
+      return `<tr><td class="name"><a href="#" class="stu-link" data-sid="${esc(s.id)}">${esc(heName(s))}</a></td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}" ${ro?'readonly tabindex="-1"':''}></td>`; }).join('') + '</tr>';
     }).join('') : `<tr><td colspan="${defs.length+1}"><div class="empty">No students in this class</div></td></tr>`
   }</tbody></table></div>`;
+  box.querySelectorAll('.stu-link').forEach(a=> a.addEventListener('click', e=>{ e.preventDefault(); openProfile(cls.id, a.dataset.sid); }));
   if(ro) return;
   const inputs = Array.from(box.querySelectorAll('tbody input'));
   inputs.forEach(inp=>{
@@ -1457,12 +1468,78 @@ function renderScoresGrid(){
       inp.parentElement.classList.toggle('bad', !validCell(defs[c], inp.value));
       saveAll('Scores', label);
     });
-    inp.addEventListener('focus', ()=> inp.select());
+    inp.addEventListener('focus', ()=>{ inp.select(); if(!selDrag && !selKeep) setSel(+inp.dataset.row, +inp.dataset.col); });
     inp.addEventListener('keydown', e=>{
+      const r = +inp.dataset.row, c = +inp.dataset.col;
+      // Shift + arrows: select a block (like Excel)
+      if(e.shiftKey && e.key.startsWith('Arrow')){
+        e.preventDefault();
+        const f = sel || {r0:r, c0:c, r1:r, c1:c};
+        let {r1, c1} = f;
+        if(e.key==='ArrowUp') r1 = Math.max(0, r1-1); if(e.key==='ArrowDown') r1 = Math.min(students.length-1, r1+1);
+        if(e.key==='ArrowLeft') c1 = Math.min(defs.length-1, c1+1); if(e.key==='ArrowRight') c1 = Math.max(0, c1-1);
+        setSel(f.r0, f.c0, r1, c1); return;
+      }
+      if((e.key==='Delete' || e.key==='Backspace') && sel && selCount()>1){ e.preventDefault(); clearSel(); return; }
       if(['Enter','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){ e.preventDefault(); moveFocus(inp, e.key, inputs, students.length, defs.length, e.shiftKey); }
     });
+    // drag across cells, or Shift+click, to select a block
+    inp.addEventListener('mousedown', e=>{
+      if(e.button!==0) return;
+      const r = +inp.dataset.row, c = +inp.dataset.col;
+      e.preventDefault();                       // we handle focus, so dragging selects cells instead of text
+      if(e.shiftKey && sel){ setSel(sel.r0, sel.c0, r, c); return; }
+      selDrag = {r, c}; setSel(r, c);
+      selKeep = true; inp.focus(); inp.select(); selKeep = false;
+    });
+    // paste a block copied from Excel
+    inp.addEventListener('paste', e=>{
+      const t = (e.clipboardData || window.clipboardData).getData('text');
+      if(!/[\t\n]/.test(t.trim())) return;
+      e.preventDefault();
+      const rows = t.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));
+      const r0 = +inp.dataset.row, c0 = +inp.dataset.col;
+      rows.forEach((row, i)=> row.forEach((v, j)=> setCell(r0+i, c0+j, v.trim())));
+      saveAll('Paste scores', label); setSel(r0, c0, Math.min(students.length-1, r0+rows.length-1), Math.min(defs.length-1, c0+Math.max(...rows.map(x=>x.length))-1));
+    });
   });
+  let sel = null, selDrag = null, selKeep = false;
+  const cellInput = (r, c) => inputs.find(i=> +i.dataset.row===r && +i.dataset.col===c);
+  const selBox = () => sel && {ra: Math.min(sel.r0, sel.r1), rb: Math.max(sel.r0, sel.r1), ca: Math.min(sel.c0, sel.c1), cb: Math.max(sel.c0, sel.c1)};
+  const selCount = () => { const b = selBox(); return b ? (b.rb-b.ra+1)*(b.cb-b.ca+1) : 0; };
+  function setSel(r0, c0, r1, c1){
+    sel = {r0, c0, r1: r1===undefined ? r0 : r1, c1: c1===undefined ? c0 : c1};
+    const b = selBox(), many = selCount()>1;
+    inputs.forEach(i=>{ const r = +i.dataset.row, c = +i.dataset.col; i.parentElement.classList.toggle('insel', many && r>=b.ra && r<=b.rb && c>=b.ca && c<=b.cb); });
+    box.classList.toggle('has-sel', many);
+    const act = cellInput(sel.r1, sel.c1);
+    if(act && document.activeElement!==act){ selKeep = true; act.focus({preventScroll:false}); if(!many) act.select(); selKeep = false; }
+  }
+  function setCell(r, c, v){
+    const i = cellInput(r, c); if(!i) return;
+    i.value = v; setCellValue(rec.perStudent[students[r].id], defs[c], v);
+    i.parentElement.classList.toggle('bad', !validCell(defs[c], v));
+  }
+  function clearSel(){
+    const b = selBox(); let n = 0;
+    for(let r=b.ra; r<=b.rb; r++) for(let c=b.ca; c<=b.cb; c++){ const i = cellInput(r, c); if(i && i.value!==''){ setCell(r, c, ''); n++; } }
+    if(n){ saveAll('Clear scores', label + ' · ' + n + ' cells'); toast(n + ' cleared'); }
+  }
+  if(scoresMouse){ document.removeEventListener('mouseup', scoresMouse.up); document.removeEventListener('mousemove', scoresMouse.move); }
+  scoresMouse = {
+    up: ()=>{ selDrag = null; },
+    move: e=>{
+      if(!selDrag || !box.isConnected) return;
+      const td = document.elementFromPoint(e.clientX, e.clientY);
+      const i = td && (td.matches('input') ? td : td.querySelector && td.querySelector('#scGrid tbody input'));
+      if(!i || !box.contains(i)) return;
+      const r = +i.dataset.row, c = +i.dataset.col;
+      if(!sel || r!==sel.r1 || c!==sel.c1) setSel(selDrag.r, selDrag.c, r, c);
+    }
+  };
+  document.addEventListener('mouseup', scoresMouse.up); document.addEventListener('mousemove', scoresMouse.move);
 }
+let scoresMouse = null;
 function moveFocus(cur, key, inputs, nRows, nCols, shift){
   const r = +cur.dataset.row, c = +cur.dataset.col; let nr = r, nc = c;
   if(key==='Tab'){ // across (right to left), wraps to the next row
@@ -1593,7 +1670,7 @@ function sheetLayout(cls, monthId){
     rows: sortedStudents(cls.id).map(s=>({sid:s.id, nameHe: heName(s)})),
     cols: buildColumnDefs(cls, wc).map(d=>({type:d.type, id:d.id, week:d.week, he:d.he})),
     weekCount: wc,
-    classHe: heName(cls), teacherHe: heName(teacherOf(cls))
+    classHe: heName(cls), teacherHe: heName(teacherOf(cls)), staffN: staffNames(cls).length
   };
 }
 const layoutSig = l => hashStr(JSON.stringify(l));
@@ -1671,9 +1748,9 @@ function sheetHtml(sh, monthLabel, fill, parsh){
   const right = fill ? `<div class="sh-review">לבדיקת המלמד</div>` : `<div class="sh-code">${qrImg(sh.code+'-P1')}${esc(sh.code+'-P1')}</div>`;
   return `<div class="sheet">${fill?'':'<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>'}
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
-      <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · המלמד <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
+      <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · ${L.staffN>1?'המלמדים':'המלמד'} <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
     <table class="sh"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody></table>
-    <div class="sh-foot"><span>ציונים שבועיים 0–100 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים</span><span>ישיבה גדילת תורה</span></div></div>`;
+    <div class="sh-foot"><span>ציונים שבועיים 1–110 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים</span><span>ישיבה גדילת תורה</span></div></div>`;
 }
 // filled copy built from today's scores (no QR – not for scanning)
 function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}, parshiotFor(cls.id, monthId)); }
@@ -1866,7 +1943,7 @@ function colDescription(c){
   if(c.type==='ichurim') return 'Late (איחור) – number of times, whole number';
   if(c.type==='yatza') return 'Left early (יצא מוקדם) – number of times, whole number';
   if(c.type==='cat') return `monthly score "${c.he}" – a number from 1 to 10`;
-  return `week ${c.week+1}, "${c.he}" – a score from 0 to 100`;
+  return `week ${c.week+1}, "${c.he}" – a score from 1 to 110`;
 }
 async function aiReadSheet(canvas, sh, page){
   const L = sh.layout, rows = L.rows.slice((page-1)*ROWS_PER_PAGE, page*ROWS_PER_PAGE);
@@ -2114,10 +2191,11 @@ function sizeVars(){ return Object.keys(st.sizes).map(k=>`--r-${k}-size:${st.siz
 function reportText(key, ctx){ let t = String(st.reportText[key] ?? ''); Object.entries(ctx||{}).forEach(([k,v])=>{ t = t.split('{'+k+'}').join(v ?? ''); }); return t; }
 const rtHtml = (key, ctx) => esc(reportText(key, ctx)).replace(/\n/g,'<br>');
 // on reports, a weekly score under the limit in Settings prints as text instead of the number
-function reportScore(raw){
+const failLimit = cls => { const own = cls && cls.failBelow; return (own!=='' && own!=null && !isNaN(Number(own))) ? Number(own) : st.failBelow; };
+function reportScore(raw, cls){
   const v = String(raw ?? '').trim();
   if(v==='' || isNaN(Number(v))) return esc(v);
-  const lim = st.failBelow;
+  const lim = failLimit(cls);
   return (lim!=='' && lim!=null && !isNaN(Number(lim)) && Number(v) < Number(lim)) ? `<span class="fail">${esc(st.reportText.failText||'לא הצליח')}</span>` : esc(v);
 }
 function reportPageHtml(cls, month, s, rec, opt){
@@ -2137,7 +2215,7 @@ function reportPageHtml(cls, month, s, rec, opt){
     const miss = `<span class="miss">${esc(st.reportText.missingText||'חסר')}</span>`;
     for(let i=0;i<wc;i++){
       if(!classWeek(i) && !String(typed[i]||'').trim()) continue;
-      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{ const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v) : miss}</td>`; }).join('')}</tr>`;
+      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{ const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v, cls) : miss}</td>`; }).join('')}</tr>`;
     }
     if(!rows) rows = `<tr><td colspan="${weekS.length+1}">—</td></tr>`;
     weekHtml = `<table class="rtab"><tr><th>${esc(st.reportText.weekHeader)}</th>${weekS.map(w=>`<th>${esc(w.label)}</th>`).join('')}</tr>${rows}</table>`;
@@ -2401,7 +2479,7 @@ function renderYearTab(){
   };
 }
 
-/* ---------- Classes (name in Hebrew, teacher typed in) ---------- */
+/* ---------- Classes (name in Hebrew, up to 3 staff typed in) ---------- */
 let csClassId = '';
 function renderClassesStaffTab(){
   const box = $('stBody');
@@ -2409,8 +2487,8 @@ function renderClassesStaffTab(){
   box.innerHTML = `<div class="cs-grid">
     <div class="card"><div class="card-head"><h2>Classes</h2><span class="pill">${st.classes.length}</span></div>
       <div class="row" style="margin-bottom:12px;"><input type="text" id="ncHe" dir="rtl" placeholder="כתה" style="flex:1 1 90px;"><input type="text" id="ncT" dir="rtl" placeholder="מלמד" style="flex:2 1 160px;"><button class="btn" id="ncAdd">${ICON.plus}Add</button></div>
-      ${st.classes.length ? `<table class="t"><thead><tr><th style="width:28%;">Class</th><th>Teacher</th><th style="width:1%;">Students</th><th style="width:1%;"></th></tr></thead><tbody>${st.classes.map(c=>`<tr data-cid="${esc(c.id)}" class="click ${c.id===csClassId?'sel':''}">
-        <td><input type="text" dir="rtl" data-f="nameHe" value="${esc(c.nameHe||'')}"></td><td><input type="text" dir="rtl" data-f="teacher" value="${esc(c.teacher||'')}"></td>
+      ${st.classes.length ? `<table class="t"><thead><tr><th style="width:20%;">Class</th><th>Staff <span class="muted small" style="font-weight:400;">· up to 3</span></th><th style="width:1%;">Students</th><th style="width:1%;"></th></tr></thead><tbody>${st.classes.map(c=>`<tr data-cid="${esc(c.id)}" class="click ${c.id===csClassId?'sel':''}">
+        <td><input type="text" dir="rtl" data-f="nameHe" value="${esc(c.nameHe||'')}"></td><td><div class="staff3" dir="rtl">${['teacher','teacher2','teacher3'].map(k=>`<input type="text" dir="rtl" data-f="${k}" value="${esc(c[k]||'')}" placeholder="${k==='teacher'?'מלמד':'—'}">`).join('')}</div></td>
         <td style="text-align:center;">${studentsOf(c.id).length}</td><td class="act">${iconBtn('trash','Delete class','data-del','danger')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No classes yet</div>'}
     </div>
     <div class="card" id="subjCard"></div>
@@ -2429,7 +2507,7 @@ function renderClassesStaffTab(){
     tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{
       const v = inp.value.trim();
       if(inp.dataset.f==='nameHe' && (!v || st.classes.some(x=>x!==c && x.nameHe===v))){ toast(v ? 'That class already exists' : 'Enter the class name'); inp.value = c.nameHe; return; }
-      c[inp.dataset.f] = v; saveAll(inp.dataset.f==='teacher' ? 'Edit teacher' : 'Edit class', heName(c)); renderSubjCard();
+      c[inp.dataset.f] = v; saveAll(inp.dataset.f==='nameHe' ? 'Edit class' : 'Edit staff', heName(c)); renderSubjCard();
     }));
     tr.querySelector('[data-del]').onclick = async ()=>{
       if(!await askConfirm('Delete class '+heName(c)+'?', 'Its students, scores, sheets and report status are removed.')) return;
@@ -2445,13 +2523,15 @@ function renderSubjCard(){
   const cls = classById(csClassId);
   if(!cls){ card.innerHTML = '<h2>Subjects</h2><div class="empty">Add a class first</div>'; return; }
   card.innerHTML = `<div class="card-head"><h2>Subjects · ${esc(classLabel(cls))}</h2><span class="sp"></span>${iconBtn('undo','Default subjects','id="sjReset"')}<button class="btn sec sm" id="sjCopy">Copy to all classes</button></div>
-    <div class="fail-set">Weekly scores below <input type="number" id="failBelow" min="0" max="100" value="${esc(st.failBelow ?? '')}"> show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b> on reports <span class="muted small">· all classes</span></div>
-    <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly (0–100)</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
+    <div class="fail-set"><span><b class="he">${esc(heName(cls))}</b>: weekly scores below <input type="number" id="failCls" min="0" max="110" value="${esc(cls.failBelow ?? '')}" placeholder="${esc(st.failBelow ?? '')}"> show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b></span>
+      <span class="muted small" style="margin-left:auto;">Other classes <input type="number" id="failBelow" min="0" max="110" value="${esc(st.failBelow ?? '')}" style="width:54px;"></span></div>
+    <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly (1–110)</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
     <table class="t"><thead><tr><th>Subject</th><th style="width:1%;">Type</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
-      <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (0–100)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
+      <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (1–110)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
       <td class="act">${iconBtn('trash','Remove','data-del','danger')}</td></tr>`).join('')}</tbody></table>`;
   const add = ()=>{ const v = $('sjNew').value.trim(); if(!v){ $('sjNew').focus(); return; } if(cls.subjects.some(s=>s.label===v)){ toast('Already there'); return; } cls.subjects.push({id:uid(), label:v, kind:$('sjKind').value}); saveAll('Add subject', v+' · '+enName(cls)); renderSubjCard(); $('sjNew').focus(); };
-  $('failBelow').onchange = e=>{ const v = e.target.value.trim(); st.failBelow = v==='' ? '' : Math.max(0, Math.min(100, Number(v)||0)); e.target.value = st.failBelow; saveAll('Report limit', v===''?'off':String(st.failBelow)); };
+  $('failCls').onchange = e=>{ const v = e.target.value.trim(); if(v==='') delete cls.failBelow; else cls.failBelow = Math.max(0, Math.min(WEEK_MAX, Number(v)||0)); e.target.value = cls.failBelow ?? ''; saveAll('Report limit', heName(cls)+' · '+(v===''?'default':String(cls.failBelow))); };
+  $('failBelow').onchange = e=>{ const v = e.target.value.trim(); st.failBelow = v==='' ? '' : Math.max(0, Math.min(WEEK_MAX, Number(v)||0)); e.target.value = st.failBelow; saveAll('Report limit', v===''?'off':String(st.failBelow)); };
   $('sjAdd').onclick = add; $('sjNew').addEventListener('keydown', e=>{ if(e.key==='Enter') add(); });
   $('sjReset').onclick = async ()=>{ if(!await askConfirm('Reset subjects for '+enName(cls)+'?', '', 'Reset', '')) return; cls.subjects = defaultSubjects(); saveAll('Reset subjects', enName(cls)); doneWithUndo('Subjects reset'); renderSubjCard(); };
   $('sjCopy').onclick = async ()=>{ if(!await askConfirm('Copy these subjects to every class?', 'Each class gets this same list.', 'Copy', '')) return; st.classes.forEach(c=>{ if(c!==cls) c.subjects = clone(cls.subjects); }); saveAll('Copy subjects to all classes', enName(cls)); doneWithUndo('Subjects copied'); };
@@ -2544,7 +2624,7 @@ function renderUsersTab(){
 /* ---------- Backup / Data ---------- */
 const normH = h => String(h||'').toLowerCase().replace(/[־\-_]/g,' ').replace(/\s+/g,' ').trim();
 const H = {
-  clsEn:['class','class name'], clsHe:['כתה','כיתה'], tEn:['teacher','teacher name'], tHe:['מלמד','שם המלמד'],
+  clsEn:['class','class name'], clsHe:['כתה','כיתה'], tEn:['teacher','teacher name'], tHe:['מלמד','שם המלמד'], t2:['מלמד 2'], t3:['מלמד 3'],
   sEn:['student','student name','name','english name'], sHe:['שם התלמיד','תלמיד','שם'],
   chesarim:['חסר','חסרים','absent','absences'], ichurim:['איחור','איחורים','late','lates'], yatza:['יצא מוקדם','left early']
 };
@@ -2561,6 +2641,7 @@ function importRows(rows, monthId, studentsOnly){
     const before = st.classes.length, cls = findOrCreateClass(cEn, cHe); if(st.classes.length>before) newClasses++;
     const tEn = pick(row, H.tEn), tHe = pick(row, H.tHe);
     if((tEn || tHe) && !cls.teacher) cls.teacher = tHe || tEn;
+    ['t2','t3'].forEach((k,i)=>{ const v = pick(row, H[k]); if(v && !cls['teacher'+(i+2)]) cls['teacher'+(i+2)] = v; });
     const sEn = pick(row, H.sEn), sHe = pick(row, H.sHe); if(!sEn && !sHe) return;
     const nb = studentsOf(cls.id).length, s = findOrCreateStudent(cls.id, sEn, sHe); if(studentsOf(cls.id).length>nb) newStudents++;
     if(studentsOnly || !month) return;
@@ -2586,9 +2667,9 @@ function monthHeaders(monthId){
   const catL = [], weekL = []; let wc = 4;
   st.classes.forEach(c=>{ c.subjects.forEach(s=>{ const arr = s.kind==='cat' ? catL : weekL; if(!arr.includes(s.label)) arr.push(s.label); }); const r = recFor(c.id, monthId); if(r && r.weekCount===5) wc = 5; });
   const weekCols = []; for(let w=1; w<=wc; w++) weekL.forEach(l=> weekCols.push(l+' '+w));
-  return {headers:['כתה','מלמד','Student','שם התלמיד','חסר','איחור','יצא מוקדם', ...catL, ...weekCols], wc};
+  return {headers:['כתה','מלמד','מלמד 2','מלמד 3','Student','שם התלמיד','חסר','איחור','יצא מוקדם', ...catL, ...weekCols], wc};
 }
-function baseRow(c, s){ return {'כתה':heName(c), 'מלמד':c.teacher||'', 'Student':s?s.name||'':'', 'שם התלמיד':s?s.nameHe||'':''}; }
+function baseRow(c, s){ return {'כתה':heName(c), 'מלמד':c.teacher||'', 'מלמד 2':c.teacher2||'', 'מלמד 3':c.teacher3||'', 'Student':s?s.name||'':'', 'שם התלמיד':s?s.nameHe||'':''}; }
 function monthRows(monthId){
   const {headers, wc} = monthHeaders(monthId), rows = [];
   st.classes.forEach(cls=>{ const rec = recFor(cls.id, monthId); studentsOf(cls.id).forEach(s=>{

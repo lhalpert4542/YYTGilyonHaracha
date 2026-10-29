@@ -163,8 +163,9 @@ function renderDashboard(){
    Student profile – scores by month and reports (like Kriah)
    ===================================================================== */
 let profile = null;   // {classId, sid}
-function openProfile(classId, sid){ profile = {classId, sid}; activateTab('profile'); }
+function openProfile(classId, sid){ profile = {classId, sid, from: activeTab==='profile' ? (profile && profile.from) : activeTab}; activateTab('profile'); }
 const openStudentReport = openProfile;
+const backTab = () => { const f = profile && profile.from; return ['scores','students','dashboard'].includes(f) ? f : (canEdit() ? 'students' : 'dashboard'); };
 function renderProfile(){
   const P = $('panel-profile'), cls = profile && classById(profile.classId), s = cls && studentsOf(cls.id).find(x=>x.id===profile.sid);
   if(!s){ P.innerHTML = '<div class="empty">Student not found</div>'; return; }
@@ -177,13 +178,13 @@ function renderProfile(){
     return {m, rec, d, avg: studentOverallAvg(d, cls, rec.weekCount), wAvg};
   });
   const T = st.dashboardThresholds, tone = v => v===null ? '' : v < T.low ? 'bad-cell' : v >= T.high ? 'good-cell' : '';
-  const trend = rows.length ? `<div class="trend">${rows.map(r=>{ const v = r.avg===null ? 0 : Math.round(r.avg); return `<div class="tb"><div class="bar-wrap"><div class="bar ${v<T.low?'b':v>=T.high?'g':''}" style="height:${Math.max(4,v)}%"></div></div><b>${r.avg===null?'—':v}</b><span class="he">${esc(monthShort(r.m.label))}</span></div>`; }).join('')}</div>` : '<div class="empty">No scores yet</div>';
+  const trend = rows.length ? `<div class="trend">${rows.map(r=>{ const v = r.avg===null ? 0 : Math.round(r.avg); return `<div class="tb"><div class="bar-wrap"><div class="bar ${v<T.low?'b':v>=T.high?'g':''}" style="height:${Math.min(100, Math.max(4,v))}%"></div></div><b>${r.avg===null?'—':v}</b><span class="he">${esc(monthShort(r.m.label))}</span></div>`; }).join('')}</div>` : '<div class="empty">No scores yet</div>';
   const head = `<tr class="grp"><th rowspan="2">חודש</th><th colspan="3" class="gs">נוכחות</th>${catS.length?`<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`:''}${weekS.length?`<th colspan="${weekS.length}" class="gs">ממוצע שבועי</th>`:''}<th rowspan="2" class="gs">ממוצע</th></tr>
     <tr><th class="gs">חסר</th><th>איחור</th><th>יצא מוקדם</th>${catS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}${weekS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}</tr>`;
   const body = rows.map(r=>`<tr class="click" data-m="${r.m.id}"><td class="name">${esc(r.m.label)}</td><td class="gs">${esc(r.d.chesarim)}</td><td>${esc(r.d.ichurim)}</td><td>${esc(r.d.yatza)}</td>
     ${catS.map((x,i)=>`<td class="${i===0?'gs':''}">${esc(r.d.cat[x.id]||'')}</td>`).join('')}${weekS.map((x,i)=>{ const a = r.wAvg(x); return `<td class="${i===0?'gs':''}">${a===null?'':Math.round(a)}</td>`; }).join('')}
     <td class="gs ${tone(r.avg)}">${r.avg===null?'':Math.round(r.avg)}</td></tr>`).join('');
-  P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}${canEdit()?'Students':'Dashboard'}</button><span class="sp"></span><button class="btn sec" id="pfEdit">${canEdit()?ICON.edit+'Edit scores':'Scores'}</button></div>
+  P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}${({scores:'Scores', students:'Students', dashboard:'Dashboard'})[backTab()]}</button><span class="sp"></span><button class="btn sec" id="pfEdit">${canEdit()?ICON.edit+'Edit scores':'Scores'}</button></div>
     <div class="card pf-head"><div><div class="pf-name he">${esc(heName(s))}</div><div class="muted">${esc(s.name||'')}</div></div>
       <div class="pf-meta"><div><span class="muted small">Class</span><b>${esc(classLabel(cls))}</b></div><div><span class="muted small">Teacher</span><b class="he">${esc(heName(teacherOf(cls))||'—')}</b></div></div></div>
     <div class="stat-grid">
@@ -195,7 +196,7 @@ function renderProfile(){
     <div class="card"><h2>Average by month</h2>${trend}</div>
     <div class="card"><h2>Scores</h2>${rows.length ? `<div class="grid-wrap" dir="rtl"><table class="entry rtl pf-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>` : '<div class="empty">No scores yet</div>'}</div>
     <div class="card"><h2>Reports</h2>${rows.length ? `<table class="t"><tbody>${rows.map(r=>`<tr data-m="${r.m.id}"><td>${he(r.m.label)}</td><td class="act">${iconBtn('view','Preview','data-pr="view"')}${iconBtn('print','Print','data-pr="print"')}${iconBtn('download','Download PDF','data-pr="pdf"')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No reports yet</div>'}</div>`;
-  $('pfBack').onclick = ()=>{ stuFilter = cls.id; activateTab(canEdit() ? 'students' : 'dashboard'); };
+  $('pfBack').onclick = ()=>{ const t = backTab(); if(t==='students') stuFilter = cls.id; activateTab(t); };
   $('pfEdit').onclick = ()=>{ scoreClassId = cls.id; scoreMonthId = (months[months.length-1]||{}).id || ''; activateTab('scores'); };
   P.querySelectorAll('.pf-table tr.click').forEach(tr=> tr.onclick = ()=>{ scoreClassId = cls.id; scoreMonthId = tr.dataset.m; activateTab('scores'); });
   P.querySelectorAll('[data-pr]').forEach(b=> b.onclick = ()=>{
@@ -390,7 +391,7 @@ function validCell(def, raw){
   const v = String(raw??'').trim(); if(v==='') return true;
   const n = Number(v); if(isNaN(n)) return false;
   if(def.type==='cat') return n>=1 && n<=10;
-  if(def.type==='week') return n>=0 && n<=100;
+  if(def.type==='week') return n>=0 && n<=WEEK_MAX;
   return Number.isInteger(n) && n>=0 && n<=31;
 }
 function cellValue(d, def){ if(def.type==='cat') return (d.cat||{})[def.id]; if(def.type==='week') return ((d.week||{})[def.id]||[])[def.week]; return d[def.type]; }
@@ -432,9 +433,10 @@ function renderScoresGrid(){
     students.length ? students.map((s,r)=>{
       if(!rec.perStudent[s.id]) rec.perStudent[s.id] = emptyStudentRecord(cls);
       const d = ensureRecordShape(rec.perStudent[s.id], cls);
-      return `<tr><td class="name">${esc(heName(s))}</td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}" ${ro?'readonly tabindex="-1"':''}></td>`; }).join('') + '</tr>';
+      return `<tr><td class="name"><a href="#" class="stu-link" data-sid="${esc(s.id)}">${esc(heName(s))}</a></td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}" ${ro?'readonly tabindex="-1"':''}></td>`; }).join('') + '</tr>';
     }).join('') : `<tr><td colspan="${defs.length+1}"><div class="empty">No students in this class</div></td></tr>`
   }</tbody></table></div>`;
+  box.querySelectorAll('.stu-link').forEach(a=> a.addEventListener('click', e=>{ e.preventDefault(); openProfile(cls.id, a.dataset.sid); }));
   if(ro) return;
   const inputs = Array.from(box.querySelectorAll('tbody input'));
   inputs.forEach(inp=>{
@@ -444,12 +446,78 @@ function renderScoresGrid(){
       inp.parentElement.classList.toggle('bad', !validCell(defs[c], inp.value));
       saveAll('Scores', label);
     });
-    inp.addEventListener('focus', ()=> inp.select());
+    inp.addEventListener('focus', ()=>{ inp.select(); if(!selDrag && !selKeep) setSel(+inp.dataset.row, +inp.dataset.col); });
     inp.addEventListener('keydown', e=>{
+      const r = +inp.dataset.row, c = +inp.dataset.col;
+      // Shift + arrows: select a block (like Excel)
+      if(e.shiftKey && e.key.startsWith('Arrow')){
+        e.preventDefault();
+        const f = sel || {r0:r, c0:c, r1:r, c1:c};
+        let {r1, c1} = f;
+        if(e.key==='ArrowUp') r1 = Math.max(0, r1-1); if(e.key==='ArrowDown') r1 = Math.min(students.length-1, r1+1);
+        if(e.key==='ArrowLeft') c1 = Math.min(defs.length-1, c1+1); if(e.key==='ArrowRight') c1 = Math.max(0, c1-1);
+        setSel(f.r0, f.c0, r1, c1); return;
+      }
+      if((e.key==='Delete' || e.key==='Backspace') && sel && selCount()>1){ e.preventDefault(); clearSel(); return; }
       if(['Enter','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){ e.preventDefault(); moveFocus(inp, e.key, inputs, students.length, defs.length, e.shiftKey); }
     });
+    // drag across cells, or Shift+click, to select a block
+    inp.addEventListener('mousedown', e=>{
+      if(e.button!==0) return;
+      const r = +inp.dataset.row, c = +inp.dataset.col;
+      e.preventDefault();                       // we handle focus, so dragging selects cells instead of text
+      if(e.shiftKey && sel){ setSel(sel.r0, sel.c0, r, c); return; }
+      selDrag = {r, c}; setSel(r, c);
+      selKeep = true; inp.focus(); inp.select(); selKeep = false;
+    });
+    // paste a block copied from Excel
+    inp.addEventListener('paste', e=>{
+      const t = (e.clipboardData || window.clipboardData).getData('text');
+      if(!/[\t\n]/.test(t.trim())) return;
+      e.preventDefault();
+      const rows = t.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));
+      const r0 = +inp.dataset.row, c0 = +inp.dataset.col;
+      rows.forEach((row, i)=> row.forEach((v, j)=> setCell(r0+i, c0+j, v.trim())));
+      saveAll('Paste scores', label); setSel(r0, c0, Math.min(students.length-1, r0+rows.length-1), Math.min(defs.length-1, c0+Math.max(...rows.map(x=>x.length))-1));
+    });
   });
+  let sel = null, selDrag = null, selKeep = false;
+  const cellInput = (r, c) => inputs.find(i=> +i.dataset.row===r && +i.dataset.col===c);
+  const selBox = () => sel && {ra: Math.min(sel.r0, sel.r1), rb: Math.max(sel.r0, sel.r1), ca: Math.min(sel.c0, sel.c1), cb: Math.max(sel.c0, sel.c1)};
+  const selCount = () => { const b = selBox(); return b ? (b.rb-b.ra+1)*(b.cb-b.ca+1) : 0; };
+  function setSel(r0, c0, r1, c1){
+    sel = {r0, c0, r1: r1===undefined ? r0 : r1, c1: c1===undefined ? c0 : c1};
+    const b = selBox(), many = selCount()>1;
+    inputs.forEach(i=>{ const r = +i.dataset.row, c = +i.dataset.col; i.parentElement.classList.toggle('insel', many && r>=b.ra && r<=b.rb && c>=b.ca && c<=b.cb); });
+    box.classList.toggle('has-sel', many);
+    const act = cellInput(sel.r1, sel.c1);
+    if(act && document.activeElement!==act){ selKeep = true; act.focus({preventScroll:false}); if(!many) act.select(); selKeep = false; }
+  }
+  function setCell(r, c, v){
+    const i = cellInput(r, c); if(!i) return;
+    i.value = v; setCellValue(rec.perStudent[students[r].id], defs[c], v);
+    i.parentElement.classList.toggle('bad', !validCell(defs[c], v));
+  }
+  function clearSel(){
+    const b = selBox(); let n = 0;
+    for(let r=b.ra; r<=b.rb; r++) for(let c=b.ca; c<=b.cb; c++){ const i = cellInput(r, c); if(i && i.value!==''){ setCell(r, c, ''); n++; } }
+    if(n){ saveAll('Clear scores', label + ' · ' + n + ' cells'); toast(n + ' cleared'); }
+  }
+  if(scoresMouse){ document.removeEventListener('mouseup', scoresMouse.up); document.removeEventListener('mousemove', scoresMouse.move); }
+  scoresMouse = {
+    up: ()=>{ selDrag = null; },
+    move: e=>{
+      if(!selDrag || !box.isConnected) return;
+      const td = document.elementFromPoint(e.clientX, e.clientY);
+      const i = td && (td.matches('input') ? td : td.querySelector && td.querySelector('#scGrid tbody input'));
+      if(!i || !box.contains(i)) return;
+      const r = +i.dataset.row, c = +i.dataset.col;
+      if(!sel || r!==sel.r1 || c!==sel.c1) setSel(selDrag.r, selDrag.c, r, c);
+    }
+  };
+  document.addEventListener('mouseup', scoresMouse.up); document.addEventListener('mousemove', scoresMouse.move);
 }
+let scoresMouse = null;
 function moveFocus(cur, key, inputs, nRows, nCols, shift){
   const r = +cur.dataset.row, c = +cur.dataset.col; let nr = r, nc = c;
   if(key==='Tab'){ // across (right to left), wraps to the next row
