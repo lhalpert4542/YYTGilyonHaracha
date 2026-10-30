@@ -1737,7 +1737,7 @@ const SHEET_CSS = `
 .sheet .sh-title{font-size:25px; font-weight:700; color:#0b4856; line-height:1.1;}
 .sheet .sh-sub{font-size:16px; margin-top:4px; color:#123038;}
 .sheet .sh-sub b{color:#0b4856;}
-.sheet .sh-code{text-align:center; font-family:'Courier New',monospace; font-size:11px; letter-spacing:1px; direction:ltr; color:#123038;}
+.sheet .sh-code{text-align:center; font-family:'Courier New',monospace; font-size:15px; font-weight:700; letter-spacing:1.5px; direction:ltr; color:#123038; border:1.5px solid #123038; border-radius:4px; padding:3px 7px;}
 .sheet .sh-code .qr{width:.78in; height:.78in; image-rendering:pixelated; display:block; margin:0 auto 2px;}
 .sheet table.sh{width:100%; border-collapse:collapse; table-layout:fixed;}
 .sheet table.sh th, .sheet table.sh td{border:1.2px solid #24434a; text-align:center; padding:1px 2px;}
@@ -1773,7 +1773,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
     const d = rec && rec.perStudent[r.sid];
     return `<tr style="height:${rowH}in;"><td class="no">${i+1}</td><td class="nm" style="font-size:${fs}px;">${esc(r.nameHe)}</td>${L.cols.map((c,ci)=>`<td class="${gs[ci]?'gs':''}${fill?' val':''}">${d ? esc(cellValue(d, c)||'') : ''}</td>`).join('')}</tr>`;
   }).join('');
-  const right = fill ? `<div class="sh-review">לבדיקת המלמד</div>` : `<div class="sh-code">${qrImg(sh.code+'-P1')}${esc(sh.code+'-P1')}</div>`;
+  const right = fill ? `<div class="sh-review">לבדיקת המלמד</div>` : `<div class="sh-code">${esc(sh.code+'-P1')}</div>`;
   return `<div class="sheet">${fill?'':'<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>'}
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
       <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · ${L.staffN>1?'המלמדים':'המלמד'} <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
@@ -1963,8 +1963,17 @@ async function detectQr(canvas){
 }
 async function aiReadCode(canvas){
   const txt = await aiCall([{type:'image', source:{type:'base64', media_type:'image/jpeg', data:canvasJpeg(canvas,1400,.85)}},
-    {type:'text', text:'This is a scanned assessment sheet. In the top corner, under a QR code, there is a printed code like "GH-ABCDE-P1". Reply with JSON only: {"code":"<the code exactly, or empty string if not visible>"}'}], 200);
-  return String(aiJson(txt).code||'').trim();
+    {type:'text', text:'This is a scanned assessment sheet. In the top corner there is a small printed code in a box like "GH-ABCDE-P1". The title says "גליון הערכה · <month and year>" and below it "כתה <class>". Reply with JSON only: {"code":"<the code exactly, or empty string if not visible>","month":"<the Hebrew month and year from the title>","class":"<the class name after כתה>"}'}], 300);
+  const o = aiJson(txt);
+  return {code: String(o.code||'').trim(), month: String(o.month||'').trim(), cls: String(o['class']||'').trim()};
+}
+// backup when the code can't be read: the class and month printed in the header (one sheet per class per month)
+function findSheetByHeader(clsName, monthLabel){
+  const norm = x => String(x||'').replace(/["'״׳\s־-]/g,'').replace(/^כתה/,'').replace(/^מר/,'').replace('חשוון','חשון');
+  if(!clsName || !monthLabel) return null;
+  const hits = Object.keys(st.sheets).filter(k=>{ const [cid, mid] = k.split('::'), c = classById(cid), m = monthById(mid);
+    return c && m && norm(heName(c))===norm(clsName) && norm(m.label)===norm(monthLabel); });
+  return hits.length===1 ? {key:hits[0], page:1} : null;
 }
 function colDescription(c){
   if(c.type==='chesarim') return 'Absent (חסר) – number of days, whole number';
@@ -1994,7 +2003,7 @@ Rules:
 - Numbers only (digits), no words.
 
 Reply with JSON only, no prose:
-{"code":"<printed code under the QR, e.g. GH-ABCDE-P1>","parsha":{"1":"<week 1 parsha or empty>"},"rows":[{"row":1,"name":"<printed name>","cells":{"c0":{"v":2,"sure":true}}}]}
+{"code":"<printed code in the top corner, e.g. GH-ABCDE-P1>","parsha":{"1":"<week 1 parsha or empty>"},"rows":[{"row":1,"name":"<printed name>","cells":{"c0":{"v":2,"sure":true}}}]}
 Include one entry per printed student row (rows with nothing written may have empty "cells").`;
   const txt = await aiCall([{type:'image', source:{type:'base64', media_type:'image/jpeg', data:canvasJpeg(canvas,2300,.92)}}, {type:'text', text:prompt}], 8000);
   const out = aiJson(txt), outRows = Array.isArray(out.rows) ? out.rows : [];
@@ -2068,7 +2077,7 @@ async function processQueue(){
       if(!pg.key){
         let code = await detectQr(pg.canvas);
         let found = code && findSheetByCode(code);
-        if(!found){ code = await aiReadCode(pg.canvas); found = code && findSheetByCode(code); }
+        if(!found){ const r = await aiReadCode(pg.canvas); found = (r.code && findSheetByCode(r.code)) || findSheetByHeader(r.cls, r.month); }
         if(!found){ pg.status = 'nomatch'; renderScanArea(); continue; }
         pg.key = found.key; pg.page = found.page;
       }
