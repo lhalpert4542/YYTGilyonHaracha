@@ -17,11 +17,12 @@ function reportText(key, ctx){ let t = String(st.reportText[key] ?? ''); Object.
 const rtHtml = (key, ctx) => esc(reportText(key, ctx)).replace(/\n/g,'<br>');
 // on reports, a weekly score under the limit in Settings prints as text instead of the number
 const failLimit = cls => { const own = cls && cls.failBelow; return (own!=='' && own!=null && !isNaN(Number(own))) ? Number(own) : ''; };
-function reportScore(raw, cls){
+function reportScore(raw, cls, sj){
   const v = String(raw ?? '').trim();
   if(v==='' || isNaN(Number(v))) return esc(v);
-  const lim = failLimit(cls);
-  return (lim!=='' && lim!=null && !isNaN(Number(lim)) && Number(v) < Number(lim)) ? `<span class="fail">${esc(st.reportText.failText||'לא הצליח')}</span>` : esc(v);
+  const lim = failLimit(cls), o = outOfNum(sj);
+  if(lim!=='' && lim!=null && !isNaN(Number(lim)) && weekPct(sj, v) < Number(lim)) return `<span class="fail">${esc(st.reportText.failText||'לא הצליח')}</span>`;
+  return o ? `<bdi dir="ltr">${esc(v)}/${o}</bdi>` : esc(v);
 }
 function reportPageHtml(cls, month, s, rec, opt){
   opt = opt || {};
@@ -40,7 +41,7 @@ function reportPageHtml(cls, month, s, rec, opt){
     const miss = `<span class="miss">${esc(st.reportText.missingText||'חסר')}</span>`;
     for(let i=0;i<wc;i++){
       if(!classWeek(i) && !String(typed[i]||'').trim()) continue;
-      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{ const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v, cls) : miss}</td>`; }).join('')}</tr>`;
+      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{ const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v, cls, w) : miss}</td>`; }).join('')}</tr>`;
     }
     if(!rows) rows = `<tr><td colspan="${weekS.length+1}">—</td></tr>`;
     weekHtml = `<table class="rtab"><tr><th>${esc(st.reportText.weekHeader)}</th>${weekS.map(w=>`<th>${esc(w.label)}</th>`).join('')}</tr>${rows}</table>`;

@@ -70,10 +70,11 @@ function renderSubjCard(){
   const cls = classById(csClassId);
   if(!cls){ card.innerHTML = '<h2>Subjects</h2><div class="empty">Add a class first</div>'; return; }
   card.innerHTML = `<div class="card-head"><h2>Subjects · ${esc(classLabel(cls))}</h2><span class="sp"></span>${iconBtn('undo','Default subjects','id="sjReset"')}<button class="btn sec sm" id="sjCopy">Copy to all classes</button></div>
-    <div class="fail-set"><span>Weekly scores below <input type="number" id="failCls" min="0" max="110" value="${esc(cls.failBelow ?? '')}" placeholder="off"> show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b></span></div>
-    <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly (1–110)</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
-    <table class="t"><thead><tr><th>Subject</th><th style="width:1%;">Type</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
-      <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (1–110)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
+    <div class="fail-set"><span>Weekly scores below <input type="number" id="failCls" min="0" max="110" value="${esc(cls.failBelow ?? '')}" placeholder="off"> % show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b></span></div>
+    <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
+    <table class="t"><thead><tr><th>Subject</th><th style="width:1%;">Type</th><th style="width:1%;white-space:nowrap;">Out of</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
+      <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
+      <td>${s.kind==='week' ? `<input type="number" class="oo-in" data-oo min="1" max="1000" value="${outOfNum(s)||''}" placeholder="—" data-tip="Empty = a plain mark (like 98). A number = marked out of it (like 12/15).">` : ''}</td>
       <td class="act">${iconBtn('trash','Remove','data-del','danger')}</td></tr>`).join('')}</tbody></table>`;
   const add = ()=>{ const v = $('sjNew').value.trim(); if(!v){ $('sjNew').focus(); return; } if(cls.subjects.some(s=>s.label===v)){ toast('Already there'); return; } cls.subjects.push({id:uid(), label:v, kind:$('sjKind').value}); saveAll('Add subject', v+' · '+enName(cls)); renderSubjCard(); $('sjNew').focus(); };
   $('failCls').onchange = e=>{ const v = e.target.value.trim(); if(v==='') cls.failBelow = ''; else cls.failBelow = Math.max(0, Math.min(WEEK_MAX, Number(v)||0)); e.target.value = cls.failBelow ?? ''; saveAll('Report limit', heName(cls)+' · '+(v===''?'off':String(cls.failBelow))); };
@@ -82,10 +83,12 @@ function renderSubjCard(){
   $('sjCopy').onclick = async ()=>{ if(!await askConfirm('Copy these subjects to every class?', 'Each class gets this same list.', 'Copy', '')) return; st.classes.forEach(c=>{ if(c!==cls) c.subjects = clone(cls.subjects); }); saveAll('Copy subjects to all classes', enName(cls)); doneWithUndo('Subjects copied'); };
   card.querySelectorAll('tr[data-id]').forEach(tr=>{
     const s = cls.subjects.find(x=>x.id===tr.dataset.id);
+    const oo = tr.querySelector('[data-oo]');
+    if(oo) oo.addEventListener('change', ()=>{ const n = Math.floor(Number(oo.value)); if(n>0) s.outOf = n; else delete s.outOf; oo.value = s.outOf || ''; saveAll('Edit subject', s.label+' · '+(s.outOf ? 'out of '+s.outOf : 'plain mark')+' · '+heName(cls)); renderSubjCard(); });
     tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{
       const f = inp.dataset.f, v = inp.value.trim();
       if(!v) return;
-      s[f] = v; saveAll('Edit subject', s.label+' · '+enName(cls)); if(f==='kind') renderSubjCard();
+      s[f] = v; if(f==='kind' && v==='cat') delete s.outOf; saveAll('Edit subject', s.label+' · '+enName(cls)); if(f==='kind') renderSubjCard();
     }));
     tr.querySelector('[data-del]').onclick = async ()=>{ if(cls.subjects.length<=1) return; if(!await askConfirm('Remove '+s.label+'?', '', 'Remove')) return; cls.subjects = cls.subjects.filter(x=>x.id!==s.id); saveAll('Remove subject', s.label+' · '+enName(cls)); doneWithUndo('Subject removed'); renderSubjCard(); };
   });

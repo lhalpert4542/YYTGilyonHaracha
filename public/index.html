@@ -237,6 +237,8 @@
   .report-content .fail, .report-content .miss{font-size:.85em;}
   .fail-set{display:flex; align-items:center; gap:6px; flex-wrap:wrap; background:var(--accent-soft); border-radius:6px; padding:8px 10px; margin-bottom:12px; font-size:13px;}
   .fail-set input{width:62px; text-align:center; font-weight:700;}
+  .upd-bar{display:flex; align-items:center; gap:12px; justify-content:space-between; margin-bottom:12px;}
+  .oo-in{width:64px; text-align:center; font-weight:700;} table.entry th .oo{font-weight:500; opacity:.75; direction:ltr; unicode-bidi:isolate;}
   .staff3{display:flex; gap:4px;} .staff3 input{flex:1 1 0; min-width:0;}
   .par-set{display:flex; align-items:center; justify-content:space-between; gap:10px 18px; flex-wrap:wrap; background:var(--accent-soft); border-radius:6px; padding:8px 12px; margin-bottom:14px;}
   .par-set .lbl{font-weight:700; font-size:13.5px; margin-left:4px;}
@@ -560,6 +562,10 @@ const monthById = id => st.months.find(m=>m.id===id);
 const classById = id => st.classes.find(c=>c.id===id);
 const staffById = id => st.staff.find(s=>s.id===id);
 const WEEK_MAX = 110;   // weekly test marks go up to 110
+// a weekly subject can be marked "out of" a number (e.g. 15); blank = a plain mark up to 110
+const outOfNum = x => { const n = Number(x && x.outOf); return n>0 ? n : 0; };
+const weekMaxOf = x => outOfNum(x) || WEEK_MAX;
+const weekPct = (x, v) => { const o = outOfNum(x); return o ? Number(v)/o*100 : Number(v); };   // for averages and limits
 // up to 3 staff names typed on the class: teacher, teacher2, teacher3
 const staffNames = cls => cls ? [cls.teacher, cls.teacher2, cls.teacher3].map(x=>String(x||'').trim()).filter(Boolean) : [];
 const joinHe = a => a.length<2 ? (a[0]||'') : a.slice(0,-1).join(', ') + ' ו' + a[a.length-1];
@@ -1087,7 +1093,7 @@ const classLabel = c => heName(c);
    ===================================================================== */
 function avgOf(arr){ const nums = arr.filter(v=>v!==''&&v!=null).map(Number).filter(n=>!isNaN(n)); return nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : null; }
 function studentOverallAvg(d, cls, wc){
-  const wv = []; cls.subjects.filter(s=>s.kind==='week').forEach(s=> (d.week[s.id]||[]).slice(0,wc).forEach(v=>{ if(v!=='') wv.push(Number(v)); }));
+  const wv = []; cls.subjects.filter(s=>s.kind==='week').forEach(s=> (d.week[s.id]||[]).slice(0,wc).forEach(v=>{ if(v!=='') wv.push(weekPct(s, v)); }));
   const w = avgOf(wv);
   const c = avgOf(cls.subjects.filter(s=>s.kind==='cat').map(s=> d.cat[s.id]==='' || d.cat[s.id]===undefined ? '' : Number(d.cat[s.id])*10));
   return avgOf([w, c].filter(v=>v!==null));
@@ -1107,7 +1113,7 @@ function classSubjectYearAvg(cls, subj){
     studentsOf(cls.id).forEach(s=>{
       const d = rec.perStudent[s.id]; if(!d) return; ensureRecordShape(d, cls);
       if(subj.kind==='cat'){ if(d.cat[match.id]!=='') vals.push(Number(d.cat[match.id])*10); }
-      else (d.week[match.id]||[]).slice(0,rec.weekCount).forEach(v=>{ if(v!=='') vals.push(Number(v)); });
+      else (d.week[match.id]||[]).slice(0,rec.weekCount).forEach(v=>{ if(v!=='') vals.push(weekPct(match, v)); });
     });
     const a = avgOf(vals); if(a!==null) monthly.push(a);
   });
@@ -1145,7 +1151,7 @@ function subjMonthPct(cls, sid, sj, m){
   const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return null;
   const ok = v => v!=='' && v!=null && !isNaN(Number(v));
   if(sj.kind==='cat'){ const v = (d.cat||{})[sj.id]; return ok(v) ? Number(v)*10 : null; }
-  const a = avgOf(((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).filter(ok).map(Number)); return a;
+  const a = avgOf(((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).filter(ok).map(v=>weekPct(sj, v))); return a;
 }
 // last month with a score compared with the month before it that had one
 function subjChange(cls, sid, sj){
@@ -1168,7 +1174,7 @@ function renderDashboard(){
     all.push(Object.assign({cls, s}, studentTotals(cls, s.id)));
     (cls.subjects||[]).forEach(sj=>{
       const a = studentSubjectAvg(cls, s.id, sj); if(a===null) return;
-      const pct = sj.kind==='cat' ? a*10 : a;
+      const pct = sj.kind==='cat' ? a*10 : weekPct(sj, a);
       if(pct < T.low) low.push({cls, s, sj, a, pct});
     });
   }));
@@ -1184,7 +1190,7 @@ function renderDashboard(){
   const lat = all.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
   const monthsWith = sortedMonths().filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id))).length;
   const thr = k => `<input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0">`;
-  const fmt = r => r.sj.kind==='cat' ? (Math.round(r.a*10)/10).toString() : Math.round(r.a);
+  const fmt = r => Math.round(r.pct)+'%';
   const chg = r => (r.ch.diff>0?'▲ ':'▼ ')+Math.round(Math.abs(r.ch.diff));
   const chgTip = r => `${monthShort(r.ch.from.m.label)} ${Math.round(r.ch.from.v)} → ${monthShort(r.ch.to.m.label)} ${Math.round(r.ch.to.v)}`;
   const list = (rows, val, klass, sub, tip) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}" ${tip?`data-tip="${esc(tip(r))}"`:''}><span class="v ${typeof klass==='function'?klass(r):klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
@@ -1195,7 +1201,7 @@ function renderDashboard(){
       <div class="stat"><div class="n">${monthsWith}</div><div class="l">Months with scores</div></div>
     </div>
     <div class="dash-cols three">
-      <div class="card ins low"><h2>Below ${thr('low')} by subject <span class="pill">${low.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Monthly subjects below ${T.low/10} out of 10</div>${list(low, fmt, 'bad', true)}</div>
+      <div class="card ins low"><h2>Below ${thr('low')}% by subject <span class="pill">${low.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Year average below ${T.low}% · monthly 1–10 count ×10 · "out of" subjects as a percent</div>${list(low, fmt, 'bad', true)}</div>
       <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2>${list(abs, r=>r.ab, 'bad')}</div>
       <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2>${list(lat, r=>r.la, 'mid')}</div>
     </div>
@@ -1232,7 +1238,7 @@ function renderProfile(){
   const head = `<tr class="grp"><th rowspan="2">חודש</th><th colspan="3" class="gs">נוכחות</th>${catS.length?`<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`:''}${weekS.length?`<th colspan="${weekS.length}" class="gs">ממוצע שבועי</th>`:''}<th rowspan="2" class="gs">ממוצע</th></tr>
     <tr><th class="gs">חסר</th><th>איחור</th><th>יצא מוקדם</th>${catS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}${weekS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}</tr>`;
   const body = rows.map(r=>`<tr class="click" data-m="${r.m.id}"><td class="name">${esc(r.m.label)}</td><td class="gs">${esc(r.d.chesarim)}</td><td>${esc(r.d.ichurim)}</td><td>${esc(r.d.yatza)}</td>
-    ${catS.map((x,i)=>`<td class="${i===0?'gs':''}">${esc(r.d.cat[x.id]||'')}</td>`).join('')}${weekS.map((x,i)=>{ const a = r.wAvg(x); return `<td class="${i===0?'gs':''}">${a===null?'':Math.round(a)}</td>`; }).join('')}
+    ${catS.map((x,i)=>`<td class="${i===0?'gs':''}">${esc(r.d.cat[x.id]||'')}</td>`).join('')}${weekS.map((x,i)=>{ const a = r.wAvg(x), o = outOfNum(x); return `<td class="${i===0?'gs':''}">${a===null?'':o?`<bdi dir="ltr">${Math.round(a*10)/10}/${o}</bdi>`:Math.round(a)}</td>`; }).join('')}
     <td class="gs ${tone(r.avg)}">${r.avg===null?'':Math.round(r.avg)}</td></tr>`).join('');
   P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}${({scores:'Scores', students:'Students', dashboard:'Dashboard'})[backTab()]}</button><span class="sp"></span><button class="btn sec" id="pfEdit">${canEdit()?ICON.edit+'Edit scores':'Scores'}</button></div>
     <div class="card pf-head"><div><div class="pf-name he">${esc(heName(s))}</div><div class="muted">${esc(s.name||'')}</div></div>
@@ -1434,14 +1440,14 @@ function buildColumnDefs(cls, wc){
   const defs = [{type:'chesarim', he:'חסר'},{type:'ichurim', he:'איחור'},{type:'yatza', he:'יצא מוקדם'}];
   cls.subjects.filter(s=>s.kind==='cat').forEach(s=> defs.push({type:'cat', id:s.id, he:s.label}));
   const ws = cls.subjects.filter(s=>s.kind==='week');
-  for(let w=0; w<wc; w++) ws.forEach(s=> defs.push({type:'week', id:s.id, week:w, he:s.label}));
+  for(let w=0; w<wc; w++) ws.forEach(s=> defs.push(Object.assign({type:'week', id:s.id, week:w, he:s.label}, outOfNum(s) ? {outOf: outOfNum(s)} : {})));
   return defs;
 }
 function validCell(def, raw){
   const v = String(raw??'').trim(); if(v==='') return true;
   const n = Number(v); if(isNaN(n)) return false;
   if(def.type==='cat') return n>=1 && n<=10;
-  if(def.type==='week') return n>=0 && n<=WEEK_MAX;
+  if(def.type==='week') return n>=0 && n<=weekMaxOf(def);
   return Number.isInteger(n) && n>=0 && n<=31;
 }
 function cellValue(d, def){ if(def.type==='cat') return (d.cat||{})[def.id]; if(def.type==='week') return ((d.week||{})[def.id]||[])[def.week]; return d[def.type]; }
@@ -1455,7 +1461,7 @@ function gridHead(cls, wc, parshiot, editable){
     g += `<th colspan="${weekS.length}" class="wkh gs"><div class="wk">שבוע ${w+1}</div><div class="parsha-ro" data-tip="Set in Assessments">${esc(parshiot[w]||'—')}</div></th>`;
   }
   const defs = buildColumnDefs(cls, wc), gs = groupStarts(defs);
-  g += '</tr><tr>' + defs.map((d,i)=>`<th class="${gs[i]?'gs':''}">${esc(d.he)}</th>`).join('');
+  g += '</tr><tr>' + defs.map((d,i)=>`<th class="${gs[i]?'gs':''}">${esc(d.he)}${d.outOf?` <span class="oo">/${d.outOf}</span>`:''}</th>`).join('');
   return g + '</tr>';
 }
 function renderScores(){
@@ -1696,7 +1702,7 @@ function sheetLayout(cls, monthId){
   const rec = recFor(cls.id, monthId), wc = rec ? rec.weekCount : 4;
   return {
     rows: sortedStudents(cls.id).map(s=>({sid:s.id, nameHe: heName(s)})),
-    cols: buildColumnDefs(cls, wc).map(d=>({type:d.type, id:d.id, week:d.week, he:d.he})),
+    cols: buildColumnDefs(cls, wc).map(d=>Object.assign({type:d.type, id:d.id, week:d.week, he:d.he}, d.outOf ? {outOf:d.outOf} : {})),
     weekCount: wc,
     classHe: heName(cls), teacherHe: heName(teacherOf(cls)), staffN: staffNames(cls).length
   };
@@ -1752,6 +1758,7 @@ const SHEET_CSS = `
 .sheet table.sh thead tr.g th.gs{border-right-color:#d5aa4e !important;}
 .sheet table.sh td.val{font-size:15px; font-weight:700; color:#0b4856;}
 .sheet .pf{color:#fff; font-size:12px;}
+.sheet .oo{display:block; font-weight:400; font-size:9.5px; color:#3d6b74; direction:ltr;}
 .sheet .sh-review{border:2px solid #d5aa4e; color:#0b4856; font-weight:700; padding:8px 14px; border-radius:6px; font-size:15px;}
 .sheet .sh-foot{position:absolute; bottom:.3in; left:.45in; right:.45in; font-size:10.5px; color:#5a7479; display:flex; justify-content:space-between;}
 `;
@@ -1768,7 +1775,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
   let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
   if(catCols.length) g += `<th colspan="${catCols.length}" class="gs">ציונים חודשיים (1–10)</th>`;
   for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">${par[w] ? `<b class="pf">${esc(par[w])}</b>` : 'פרשה: <span></span>'}</span></th>`;
-  let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc((c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he).replace(/־/g,' '))}</th>`).join('');
+  let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc((c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he).replace(/־/g,' '))}${c.outOf?`<span class="oo">/${c.outOf}</span>`:''}</th>`).join('');
   const body = L.rows.map((r,i)=>{
     const d = rec && rec.perStudent[r.sid];
     return `<tr style="height:${rowH}in;"><td class="no">${i+1}</td><td class="nm" style="font-size:${fs}px;">${esc(r.nameHe)}</td>${L.cols.map((c,ci)=>`<td class="${gs[ci]?'gs':''}${fill?' val':''}">${d ? esc(cellValue(d, c)||'') : ''}</td>`).join('')}</tr>`;
@@ -1778,7 +1785,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
       <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · ${L.staffN>1?'המלמדים':'המלמד'} <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
     <table class="sh"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody></table>
-    <div class="sh-foot"><span>ציונים שבועיים 1–110 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים (ריק = 0)</span><span>ישיבה יגדיל תורה</span></div></div>`;
+    <div class="sh-foot"><span>${L.cols.some(c=>c.outOf) ? 'ציונים שבועיים: לפי הרשום בעמודה' : 'ציונים שבועיים 1–110'} · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים (ריק = 0)</span><span>ישיבה יגדיל תורה</span></div></div>`;
 }
 // filled copy built from today's scores (no QR – not for scanning)
 function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}, parshiotFor(cls.id, monthId)); }
@@ -1805,6 +1812,19 @@ function sheetActs(attr, state, label){
   return iconBtn('view','Preview',`${attr}="preview"`) + iconBtn('print','Print',`${attr}="print"`) + iconBtn('download','Download PDF',`${attr}="pdf"`)
     + `<button type="button" class="icon-btn ${state==='stale'?'warn-ic':''}" data-tip="${state==='stale'?'Changed since generated – regenerate':'Regenerate'}" ${attr}="regen">${ICON.redo}</button>`
     + iconBtn('trash','Ungenerate',`${attr}="ungen"`,'danger');
+}
+// sheets that no longer match the settings (subjects, out of, weeks) and were not scanned yet
+function changedSheets(){
+  const out = [];
+  sortedMonths().forEach(m=> sheetClasses().forEach(c=>{ const sh = st.sheets[gradeKey(c.id, m.id)]; if(sh && !sh.scannedAt && sheetState(c, m.id)==='stale') out.push({c, m, sh}); }));
+  return out;
+}
+function updateChangedSheets(){ const list = changedSheets(); list.forEach(({c, m, sh})=>{ sh.layout = sheetLayout(c, m.id); sh.sig = layoutSig(sh.layout); sh.at = Date.now(); }); return list.length; }
+function staleBanner(){
+  if(!canEdit()) return '';
+  const list = changedSheets(); if(!list.length) return '';
+  const names = Array.from(new Set(list.map(x=> heName(x.c)+' · '+x.m.label)));
+  return `<div class="notice warn upd-bar"><span><b>${list.length} sheet${list.length>1?'s':''} changed since generated</b> <span class="he small">(${esc(names.slice(0,4).join(', '))}${names.length>4?'…':''})</span> – settings were updated.</span><button class="btn sm" id="updSheets">${ICON.redo}Update sheets</button></div>`;
 }
 function renderAssessments(){
   const P = $('panel-assessments'), months = sortedMonths(), classes = sheetClasses();
@@ -1839,7 +1859,8 @@ function renderAssessments(){
         <td>${STATE_TAG[s]} ${sh?`<span class="muted small" style="font-family:monospace;">${esc(sh.code)}</span>`:''}</td><td class="act">${sheetActs('data-cact', s)}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">Add classes and students first</div>'}</div>` : '';
   P.innerHTML = pageHead('Assessments', `<button class="btn" id="scanBtn">${ICON.scan}Scan sheets</button>`) +
-    `<div id="scanArea"></div><div class="month-cards">${cards}</div>${detail}`;
+    `<div id="scanArea"></div>${staleBanner()}<div class="month-cards">${cards}</div>${detail}`;
+  const ub = $('updSheets'); if(ub) ub.onclick = ()=>{ const n = updateChangedSheets(); saveAll('Update sheets', n+' sheets'); toast(n+(n===1?' sheet':' sheets')+' updated – print again'); renderAssessments(); };
   $('scanBtn').addEventListener('click', ()=>{ if(!aiKey()){ noKeyNotice(); return; } $('scanFileInput').click(); });
   P.querySelectorAll('.parsha-all').forEach(inp=> inp.addEventListener('input', ()=>{
     if(!canEdit()) return;
@@ -1980,7 +2001,7 @@ function colDescription(c){
   if(c.type==='ichurim') return 'Late (איחור) – number of times, whole number';
   if(c.type==='yatza') return 'Left early (יצא מוקדם) – number of times, whole number';
   if(c.type==='cat') return `monthly score "${c.he}" – a number from 1 to 10`;
-  return `week ${c.week+1}, "${c.he}" – a score from 1 to 110`;
+  return c.outOf ? `week ${c.week+1}, "${c.he}" – a mark out of ${c.outOf} (a number from 0 to ${c.outOf}; if written like "12/15" give just 12)` : `week ${c.week+1}, "${c.he}" – a score from 1 to 110`;
 }
 async function aiReadSheet(canvas, sh, page){
   const L = sh.layout, rows = L.rows.slice((page-1)*ROWS_PER_PAGE, page*ROWS_PER_PAGE);
@@ -2229,11 +2250,12 @@ function reportText(key, ctx){ let t = String(st.reportText[key] ?? ''); Object.
 const rtHtml = (key, ctx) => esc(reportText(key, ctx)).replace(/\n/g,'<br>');
 // on reports, a weekly score under the limit in Settings prints as text instead of the number
 const failLimit = cls => { const own = cls && cls.failBelow; return (own!=='' && own!=null && !isNaN(Number(own))) ? Number(own) : ''; };
-function reportScore(raw, cls){
+function reportScore(raw, cls, sj){
   const v = String(raw ?? '').trim();
   if(v==='' || isNaN(Number(v))) return esc(v);
-  const lim = failLimit(cls);
-  return (lim!=='' && lim!=null && !isNaN(Number(lim)) && Number(v) < Number(lim)) ? `<span class="fail">${esc(st.reportText.failText||'לא הצליח')}</span>` : esc(v);
+  const lim = failLimit(cls), o = outOfNum(sj);
+  if(lim!=='' && lim!=null && !isNaN(Number(lim)) && weekPct(sj, v) < Number(lim)) return `<span class="fail">${esc(st.reportText.failText||'לא הצליח')}</span>`;
+  return o ? `<bdi dir="ltr">${esc(v)}/${o}</bdi>` : esc(v);
 }
 function reportPageHtml(cls, month, s, rec, opt){
   opt = opt || {};
@@ -2252,7 +2274,7 @@ function reportPageHtml(cls, month, s, rec, opt){
     const miss = `<span class="miss">${esc(st.reportText.missingText||'חסר')}</span>`;
     for(let i=0;i<wc;i++){
       if(!classWeek(i) && !String(typed[i]||'').trim()) continue;
-      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{ const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v, cls) : miss}</td>`; }).join('')}</tr>`;
+      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{ const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v, cls, w) : miss}</td>`; }).join('')}</tr>`;
     }
     if(!rows) rows = `<tr><td colspan="${weekS.length+1}">—</td></tr>`;
     weekHtml = `<table class="rtab"><tr><th>${esc(st.reportText.weekHeader)}</th>${weekS.map(w=>`<th>${esc(w.label)}</th>`).join('')}</tr>${rows}</table>`;
@@ -2560,10 +2582,11 @@ function renderSubjCard(){
   const cls = classById(csClassId);
   if(!cls){ card.innerHTML = '<h2>Subjects</h2><div class="empty">Add a class first</div>'; return; }
   card.innerHTML = `<div class="card-head"><h2>Subjects · ${esc(classLabel(cls))}</h2><span class="sp"></span>${iconBtn('undo','Default subjects','id="sjReset"')}<button class="btn sec sm" id="sjCopy">Copy to all classes</button></div>
-    <div class="fail-set"><span>Weekly scores below <input type="number" id="failCls" min="0" max="110" value="${esc(cls.failBelow ?? '')}" placeholder="off"> show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b></span></div>
-    <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly (1–110)</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
-    <table class="t"><thead><tr><th>Subject</th><th style="width:1%;">Type</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
-      <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly (1–110)</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
+    <div class="fail-set"><span>Weekly scores below <input type="number" id="failCls" min="0" max="110" value="${esc(cls.failBelow ?? '')}" placeholder="off"> % show <b class="he">${esc(st.reportText.failText||'לא הצליח')}</b></span></div>
+    <div class="row" style="margin-bottom:12px;"><input type="text" id="sjNew" dir="rtl" placeholder="מקצוע" style="flex:1 1 140px;"><select id="sjKind"><option value="week">Weekly</option><option value="cat">Monthly (1–10)</option></select><button class="btn" id="sjAdd">${ICON.plus}Add</button></div>
+    <table class="t"><thead><tr><th>Subject</th><th style="width:1%;">Type</th><th style="width:1%;white-space:nowrap;">Out of</th><th></th></tr></thead><tbody>${cls.subjects.map(s=>`<tr data-id="${esc(s.id)}"><td style="min-width:120px;"><input type="text" dir="rtl" data-f="label" value="${esc(s.label)}"></td>
+      <td><select data-f="kind" style="width:132px;"><option value="week" ${s.kind==='week'?'selected':''}>Weekly</option><option value="cat" ${s.kind==='cat'?'selected':''}>Monthly (1–10)</option></select></td>
+      <td>${s.kind==='week' ? `<input type="number" class="oo-in" data-oo min="1" max="1000" value="${outOfNum(s)||''}" placeholder="—" data-tip="Empty = a plain mark (like 98). A number = marked out of it (like 12/15).">` : ''}</td>
       <td class="act">${iconBtn('trash','Remove','data-del','danger')}</td></tr>`).join('')}</tbody></table>`;
   const add = ()=>{ const v = $('sjNew').value.trim(); if(!v){ $('sjNew').focus(); return; } if(cls.subjects.some(s=>s.label===v)){ toast('Already there'); return; } cls.subjects.push({id:uid(), label:v, kind:$('sjKind').value}); saveAll('Add subject', v+' · '+enName(cls)); renderSubjCard(); $('sjNew').focus(); };
   $('failCls').onchange = e=>{ const v = e.target.value.trim(); if(v==='') cls.failBelow = ''; else cls.failBelow = Math.max(0, Math.min(WEEK_MAX, Number(v)||0)); e.target.value = cls.failBelow ?? ''; saveAll('Report limit', heName(cls)+' · '+(v===''?'off':String(cls.failBelow))); };
@@ -2572,10 +2595,12 @@ function renderSubjCard(){
   $('sjCopy').onclick = async ()=>{ if(!await askConfirm('Copy these subjects to every class?', 'Each class gets this same list.', 'Copy', '')) return; st.classes.forEach(c=>{ if(c!==cls) c.subjects = clone(cls.subjects); }); saveAll('Copy subjects to all classes', enName(cls)); doneWithUndo('Subjects copied'); };
   card.querySelectorAll('tr[data-id]').forEach(tr=>{
     const s = cls.subjects.find(x=>x.id===tr.dataset.id);
+    const oo = tr.querySelector('[data-oo]');
+    if(oo) oo.addEventListener('change', ()=>{ const n = Math.floor(Number(oo.value)); if(n>0) s.outOf = n; else delete s.outOf; oo.value = s.outOf || ''; saveAll('Edit subject', s.label+' · '+(s.outOf ? 'out of '+s.outOf : 'plain mark')+' · '+heName(cls)); renderSubjCard(); });
     tr.querySelectorAll('[data-f]').forEach(inp=> inp.addEventListener('change', ()=>{
       const f = inp.dataset.f, v = inp.value.trim();
       if(!v) return;
-      s[f] = v; saveAll('Edit subject', s.label+' · '+enName(cls)); if(f==='kind') renderSubjCard();
+      s[f] = v; if(f==='kind' && v==='cat') delete s.outOf; saveAll('Edit subject', s.label+' · '+enName(cls)); if(f==='kind') renderSubjCard();
     }));
     tr.querySelector('[data-del]').onclick = async ()=>{ if(cls.subjects.length<=1) return; if(!await askConfirm('Remove '+s.label+'?', '', 'Remove')) return; cls.subjects = cls.subjects.filter(x=>x.id!==s.id); saveAll('Remove subject', s.label+' · '+enName(cls)); doneWithUndo('Subject removed'); renderSubjCard(); };
   });

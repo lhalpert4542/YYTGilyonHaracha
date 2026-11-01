@@ -197,6 +197,10 @@ const monthById = id => st.months.find(m=>m.id===id);
 const classById = id => st.classes.find(c=>c.id===id);
 const staffById = id => st.staff.find(s=>s.id===id);
 const WEEK_MAX = 110;   // weekly test marks go up to 110
+// a weekly subject can be marked "out of" a number (e.g. 15); blank = a plain mark up to 110
+const outOfNum = x => { const n = Number(x && x.outOf); return n>0 ? n : 0; };
+const weekMaxOf = x => outOfNum(x) || WEEK_MAX;
+const weekPct = (x, v) => { const o = outOfNum(x); return o ? Number(v)/o*100 : Number(v); };   // for averages and limits
 // up to 3 staff names typed on the class: teacher, teacher2, teacher3
 const staffNames = cls => cls ? [cls.teacher, cls.teacher2, cls.teacher3].map(x=>String(x||'').trim()).filter(Boolean) : [];
 const joinHe = a => a.length<2 ? (a[0]||'') : a.slice(0,-1).join(', ') + ' ו' + a[a.length-1];

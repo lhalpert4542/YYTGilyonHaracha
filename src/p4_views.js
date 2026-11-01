@@ -37,7 +37,7 @@ const classLabel = c => heName(c);
    ===================================================================== */
 function avgOf(arr){ const nums = arr.filter(v=>v!==''&&v!=null).map(Number).filter(n=>!isNaN(n)); return nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : null; }
 function studentOverallAvg(d, cls, wc){
-  const wv = []; cls.subjects.filter(s=>s.kind==='week').forEach(s=> (d.week[s.id]||[]).slice(0,wc).forEach(v=>{ if(v!=='') wv.push(Number(v)); }));
+  const wv = []; cls.subjects.filter(s=>s.kind==='week').forEach(s=> (d.week[s.id]||[]).slice(0,wc).forEach(v=>{ if(v!=='') wv.push(weekPct(s, v)); }));
   const w = avgOf(wv);
   const c = avgOf(cls.subjects.filter(s=>s.kind==='cat').map(s=> d.cat[s.id]==='' || d.cat[s.id]===undefined ? '' : Number(d.cat[s.id])*10));
   return avgOf([w, c].filter(v=>v!==null));
@@ -57,7 +57,7 @@ function classSubjectYearAvg(cls, subj){
     studentsOf(cls.id).forEach(s=>{
       const d = rec.perStudent[s.id]; if(!d) return; ensureRecordShape(d, cls);
       if(subj.kind==='cat'){ if(d.cat[match.id]!=='') vals.push(Number(d.cat[match.id])*10); }
-      else (d.week[match.id]||[]).slice(0,rec.weekCount).forEach(v=>{ if(v!=='') vals.push(Number(v)); });
+      else (d.week[match.id]||[]).slice(0,rec.weekCount).forEach(v=>{ if(v!=='') vals.push(weekPct(match, v)); });
     });
     const a = avgOf(vals); if(a!==null) monthly.push(a);
   });
@@ -95,7 +95,7 @@ function subjMonthPct(cls, sid, sj, m){
   const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return null;
   const ok = v => v!=='' && v!=null && !isNaN(Number(v));
   if(sj.kind==='cat'){ const v = (d.cat||{})[sj.id]; return ok(v) ? Number(v)*10 : null; }
-  const a = avgOf(((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).filter(ok).map(Number)); return a;
+  const a = avgOf(((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).filter(ok).map(v=>weekPct(sj, v))); return a;
 }
 // last month with a score compared with the month before it that had one
 function subjChange(cls, sid, sj){
@@ -118,7 +118,7 @@ function renderDashboard(){
     all.push(Object.assign({cls, s}, studentTotals(cls, s.id)));
     (cls.subjects||[]).forEach(sj=>{
       const a = studentSubjectAvg(cls, s.id, sj); if(a===null) return;
-      const pct = sj.kind==='cat' ? a*10 : a;
+      const pct = sj.kind==='cat' ? a*10 : weekPct(sj, a);
       if(pct < T.low) low.push({cls, s, sj, a, pct});
     });
   }));
@@ -134,7 +134,7 @@ function renderDashboard(){
   const lat = all.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
   const monthsWith = sortedMonths().filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id))).length;
   const thr = k => `<input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0">`;
-  const fmt = r => r.sj.kind==='cat' ? (Math.round(r.a*10)/10).toString() : Math.round(r.a);
+  const fmt = r => Math.round(r.pct)+'%';
   const chg = r => (r.ch.diff>0?'▲ ':'▼ ')+Math.round(Math.abs(r.ch.diff));
   const chgTip = r => `${monthShort(r.ch.from.m.label)} ${Math.round(r.ch.from.v)} → ${monthShort(r.ch.to.m.label)} ${Math.round(r.ch.to.v)}`;
   const list = (rows, val, klass, sub, tip) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}" ${tip?`data-tip="${esc(tip(r))}"`:''}><span class="v ${typeof klass==='function'?klass(r):klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
@@ -145,7 +145,7 @@ function renderDashboard(){
       <div class="stat"><div class="n">${monthsWith}</div><div class="l">Months with scores</div></div>
     </div>
     <div class="dash-cols three">
-      <div class="card ins low"><h2>Below ${thr('low')} by subject <span class="pill">${low.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Monthly subjects below ${T.low/10} out of 10</div>${list(low, fmt, 'bad', true)}</div>
+      <div class="card ins low"><h2>Below ${thr('low')}% by subject <span class="pill">${low.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Year average below ${T.low}% · monthly 1–10 count ×10 · "out of" subjects as a percent</div>${list(low, fmt, 'bad', true)}</div>
       <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2>${list(abs, r=>r.ab, 'bad')}</div>
       <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2>${list(lat, r=>r.la, 'mid')}</div>
     </div>
@@ -182,7 +182,7 @@ function renderProfile(){
   const head = `<tr class="grp"><th rowspan="2">חודש</th><th colspan="3" class="gs">נוכחות</th>${catS.length?`<th colspan="${catS.length}" class="gs">ניקוד (1–10)</th>`:''}${weekS.length?`<th colspan="${weekS.length}" class="gs">ממוצע שבועי</th>`:''}<th rowspan="2" class="gs">ממוצע</th></tr>
     <tr><th class="gs">חסר</th><th>איחור</th><th>יצא מוקדם</th>${catS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}${weekS.map((x,i)=>`<th class="${i===0?'gs':''}">${esc(x.label)}</th>`).join('')}</tr>`;
   const body = rows.map(r=>`<tr class="click" data-m="${r.m.id}"><td class="name">${esc(r.m.label)}</td><td class="gs">${esc(r.d.chesarim)}</td><td>${esc(r.d.ichurim)}</td><td>${esc(r.d.yatza)}</td>
-    ${catS.map((x,i)=>`<td class="${i===0?'gs':''}">${esc(r.d.cat[x.id]||'')}</td>`).join('')}${weekS.map((x,i)=>{ const a = r.wAvg(x); return `<td class="${i===0?'gs':''}">${a===null?'':Math.round(a)}</td>`; }).join('')}
+    ${catS.map((x,i)=>`<td class="${i===0?'gs':''}">${esc(r.d.cat[x.id]||'')}</td>`).join('')}${weekS.map((x,i)=>{ const a = r.wAvg(x), o = outOfNum(x); return `<td class="${i===0?'gs':''}">${a===null?'':o?`<bdi dir="ltr">${Math.round(a*10)/10}/${o}</bdi>`:Math.round(a)}</td>`; }).join('')}
     <td class="gs ${tone(r.avg)}">${r.avg===null?'':Math.round(r.avg)}</td></tr>`).join('');
   P.innerHTML = `<div class="page-head"><button class="btn sec sm" id="pfBack">${ICON.left}${({scores:'Scores', students:'Students', dashboard:'Dashboard'})[backTab()]}</button><span class="sp"></span><button class="btn sec" id="pfEdit">${canEdit()?ICON.edit+'Edit scores':'Scores'}</button></div>
     <div class="card pf-head"><div><div class="pf-name he">${esc(heName(s))}</div><div class="muted">${esc(s.name||'')}</div></div>
@@ -384,14 +384,14 @@ function buildColumnDefs(cls, wc){
   const defs = [{type:'chesarim', he:'חסר'},{type:'ichurim', he:'איחור'},{type:'yatza', he:'יצא מוקדם'}];
   cls.subjects.filter(s=>s.kind==='cat').forEach(s=> defs.push({type:'cat', id:s.id, he:s.label}));
   const ws = cls.subjects.filter(s=>s.kind==='week');
-  for(let w=0; w<wc; w++) ws.forEach(s=> defs.push({type:'week', id:s.id, week:w, he:s.label}));
+  for(let w=0; w<wc; w++) ws.forEach(s=> defs.push(Object.assign({type:'week', id:s.id, week:w, he:s.label}, outOfNum(s) ? {outOf: outOfNum(s)} : {})));
   return defs;
 }
 function validCell(def, raw){
   const v = String(raw??'').trim(); if(v==='') return true;
   const n = Number(v); if(isNaN(n)) return false;
   if(def.type==='cat') return n>=1 && n<=10;
-  if(def.type==='week') return n>=0 && n<=WEEK_MAX;
+  if(def.type==='week') return n>=0 && n<=weekMaxOf(def);
   return Number.isInteger(n) && n>=0 && n<=31;
 }
 function cellValue(d, def){ if(def.type==='cat') return (d.cat||{})[def.id]; if(def.type==='week') return ((d.week||{})[def.id]||[])[def.week]; return d[def.type]; }
@@ -405,7 +405,7 @@ function gridHead(cls, wc, parshiot, editable){
     g += `<th colspan="${weekS.length}" class="wkh gs"><div class="wk">שבוע ${w+1}</div><div class="parsha-ro" data-tip="Set in Assessments">${esc(parshiot[w]||'—')}</div></th>`;
   }
   const defs = buildColumnDefs(cls, wc), gs = groupStarts(defs);
-  g += '</tr><tr>' + defs.map((d,i)=>`<th class="${gs[i]?'gs':''}">${esc(d.he)}</th>`).join('');
+  g += '</tr><tr>' + defs.map((d,i)=>`<th class="${gs[i]?'gs':''}">${esc(d.he)}${d.outOf?` <span class="oo">/${d.outOf}</span>`:''}</th>`).join('');
   return g + '</tr>';
 }
 function renderScores(){

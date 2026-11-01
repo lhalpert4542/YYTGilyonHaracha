@@ -112,7 +112,7 @@ function sheetLayout(cls, monthId){
   const rec = recFor(cls.id, monthId), wc = rec ? rec.weekCount : 4;
   return {
     rows: sortedStudents(cls.id).map(s=>({sid:s.id, nameHe: heName(s)})),
-    cols: buildColumnDefs(cls, wc).map(d=>({type:d.type, id:d.id, week:d.week, he:d.he})),
+    cols: buildColumnDefs(cls, wc).map(d=>Object.assign({type:d.type, id:d.id, week:d.week, he:d.he}, d.outOf ? {outOf:d.outOf} : {})),
     weekCount: wc,
     classHe: heName(cls), teacherHe: heName(teacherOf(cls)), staffN: staffNames(cls).length
   };
@@ -168,6 +168,7 @@ const SHEET_CSS = `
 .sheet table.sh thead tr.g th.gs{border-right-color:#d5aa4e !important;}
 .sheet table.sh td.val{font-size:15px; font-weight:700; color:#0b4856;}
 .sheet .pf{color:#fff; font-size:12px;}
+.sheet .oo{display:block; font-weight:400; font-size:9.5px; color:#3d6b74; direction:ltr;}
 .sheet .sh-review{border:2px solid #d5aa4e; color:#0b4856; font-weight:700; padding:8px 14px; border-radius:6px; font-size:15px;}
 .sheet .sh-foot{position:absolute; bottom:.3in; left:.45in; right:.45in; font-size:10.5px; color:#5a7479; display:flex; justify-content:space-between;}
 `;
@@ -184,7 +185,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
   let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
   if(catCols.length) g += `<th colspan="${catCols.length}" class="gs">ציונים חודשיים (1–10)</th>`;
   for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">${par[w] ? `<b class="pf">${esc(par[w])}</b>` : 'פרשה: <span></span>'}</span></th>`;
-  let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc((c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he).replace(/־/g,' '))}</th>`).join('');
+  let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc((c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he).replace(/־/g,' '))}${c.outOf?`<span class="oo">/${c.outOf}</span>`:''}</th>`).join('');
   const body = L.rows.map((r,i)=>{
     const d = rec && rec.perStudent[r.sid];
     return `<tr style="height:${rowH}in;"><td class="no">${i+1}</td><td class="nm" style="font-size:${fs}px;">${esc(r.nameHe)}</td>${L.cols.map((c,ci)=>`<td class="${gs[ci]?'gs':''}${fill?' val':''}">${d ? esc(cellValue(d, c)||'') : ''}</td>`).join('')}</tr>`;
@@ -194,7 +195,7 @@ function sheetHtml(sh, monthLabel, fill, parsh){
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
       <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · ${L.staffN>1?'המלמדים':'המלמד'} <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
     <table class="sh"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody></table>
-    <div class="sh-foot"><span>ציונים שבועיים 1–110 · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים (ריק = 0)</span><span>ישיבה יגדיל תורה</span></div></div>`;
+    <div class="sh-foot"><span>${L.cols.some(c=>c.outOf) ? 'ציונים שבועיים: לפי הרשום בעמודה' : 'ציונים שבועיים 1–110'} · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים (ריק = 0)</span><span>ישיבה יגדיל תורה</span></div></div>`;
 }
 // filled copy built from today's scores (no QR – not for scanning)
 function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}, parshiotFor(cls.id, monthId)); }
@@ -221,6 +222,19 @@ function sheetActs(attr, state, label){
   return iconBtn('view','Preview',`${attr}="preview"`) + iconBtn('print','Print',`${attr}="print"`) + iconBtn('download','Download PDF',`${attr}="pdf"`)
     + `<button type="button" class="icon-btn ${state==='stale'?'warn-ic':''}" data-tip="${state==='stale'?'Changed since generated – regenerate':'Regenerate'}" ${attr}="regen">${ICON.redo}</button>`
     + iconBtn('trash','Ungenerate',`${attr}="ungen"`,'danger');
+}
+// sheets that no longer match the settings (subjects, out of, weeks) and were not scanned yet
+function changedSheets(){
+  const out = [];
+  sortedMonths().forEach(m=> sheetClasses().forEach(c=>{ const sh = st.sheets[gradeKey(c.id, m.id)]; if(sh && !sh.scannedAt && sheetState(c, m.id)==='stale') out.push({c, m, sh}); }));
+  return out;
+}
+function updateChangedSheets(){ const list = changedSheets(); list.forEach(({c, m, sh})=>{ sh.layout = sheetLayout(c, m.id); sh.sig = layoutSig(sh.layout); sh.at = Date.now(); }); return list.length; }
+function staleBanner(){
+  if(!canEdit()) return '';
+  const list = changedSheets(); if(!list.length) return '';
+  const names = Array.from(new Set(list.map(x=> heName(x.c)+' · '+x.m.label)));
+  return `<div class="notice warn upd-bar"><span><b>${list.length} sheet${list.length>1?'s':''} changed since generated</b> <span class="he small">(${esc(names.slice(0,4).join(', '))}${names.length>4?'…':''})</span> – settings were updated.</span><button class="btn sm" id="updSheets">${ICON.redo}Update sheets</button></div>`;
 }
 function renderAssessments(){
   const P = $('panel-assessments'), months = sortedMonths(), classes = sheetClasses();
@@ -255,7 +269,8 @@ function renderAssessments(){
         <td>${STATE_TAG[s]} ${sh?`<span class="muted small" style="font-family:monospace;">${esc(sh.code)}</span>`:''}</td><td class="act">${sheetActs('data-cact', s)}</td></tr>`;
     }).join('')}</tbody></table>` : '<div class="empty">Add classes and students first</div>'}</div>` : '';
   P.innerHTML = pageHead('Assessments', `<button class="btn" id="scanBtn">${ICON.scan}Scan sheets</button>`) +
-    `<div id="scanArea"></div><div class="month-cards">${cards}</div>${detail}`;
+    `<div id="scanArea"></div>${staleBanner()}<div class="month-cards">${cards}</div>${detail}`;
+  const ub = $('updSheets'); if(ub) ub.onclick = ()=>{ const n = updateChangedSheets(); saveAll('Update sheets', n+' sheets'); toast(n+(n===1?' sheet':' sheets')+' updated – print again'); renderAssessments(); };
   $('scanBtn').addEventListener('click', ()=>{ if(!aiKey()){ noKeyNotice(); return; } $('scanFileInput').click(); });
   P.querySelectorAll('.parsha-all').forEach(inp=> inp.addEventListener('input', ()=>{
     if(!canEdit()) return;
@@ -396,7 +411,7 @@ function colDescription(c){
   if(c.type==='ichurim') return 'Late (איחור) – number of times, whole number';
   if(c.type==='yatza') return 'Left early (יצא מוקדם) – number of times, whole number';
   if(c.type==='cat') return `monthly score "${c.he}" – a number from 1 to 10`;
-  return `week ${c.week+1}, "${c.he}" – a score from 1 to 110`;
+  return c.outOf ? `week ${c.week+1}, "${c.he}" – a mark out of ${c.outOf} (a number from 0 to ${c.outOf}; if written like "12/15" give just 12)` : `week ${c.week+1}, "${c.he}" – a score from 1 to 110`;
 }
 async function aiReadSheet(canvas, sh, page){
   const L = sh.layout, rows = L.rows.slice((page-1)*ROWS_PER_PAGE, page*ROWS_PER_PAGE);
