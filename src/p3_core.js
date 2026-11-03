@@ -201,6 +201,21 @@ const WEEK_MAX = 110;   // weekly test marks go up to 110
 const outOfNum = x => { const n = Number(x && x.outOf); return n>0 ? n : 0; };
 const weekMaxOf = x => outOfNum(x) || WEEK_MAX;
 const weekPct = (x, v) => { const o = outOfNum(x); return o ? Number(v)/o*100 : Number(v); };   // for averages and limits
+// one week can be "out of" a different number (rec.weekOutOf), or have no test at all (rec.noTest)
+const outOfAt = (rec, sj, w) => { const o = Number(rec && rec.weekOutOf && rec.weekOutOf[sj.id] && rec.weekOutOf[sj.id][w]); return o>0 ? o : outOfNum(sj); };
+const weekPctAt = (rec, sj, w, v) => { const o = outOfAt(rec, sj, w); return o ? Number(v)/o*100 : Number(v); };
+const noTestAt = (rec, sjId, w) => !!(rec && rec.noTest && rec.noTest[sjId] && rec.noTest[sjId][w]);
+function setNoTest(rec, sjId, w, on){ rec.noTest = rec.noTest || {}; const a = rec.noTest[sjId] = rec.noTest[sjId] || {}; if(on) a[w] = true; else delete a[w]; if(!Object.keys(a).length) delete rec.noTest[sjId]; }
+function setWeekOutOf(rec, sj, w, n){ rec.weekOutOf = rec.weekOutOf || {}; const a = rec.weekOutOf[sj.id] = rec.weekOutOf[sj.id] || {}; if(n>0 && n!==outOfNum(sj)) a[w] = n; else delete a[w]; if(!Object.keys(a).length) delete rec.weekOutOf[sj.id]; }
+// points program (e.g. תפלה in the older classes): each month's points add up; st.pointsMax = the high score up to each month
+const isPoints = sj => !!(sj && sj.kind==='cat' && sj.points);
+const pointsHigh = m => { const n = Number(m && (st.pointsMax||{})[m.id]); return n>0 ? n : 0; };
+function pointsTotal(cls, sid, sj, m){
+  if(!m) return null;
+  const list = monthsOfYear(m.year), upto = list.indexOf(m); let sum = 0, any = false;
+  list.slice(0, upto+1).forEach(x=>{ const r = recFor(cls.id, x.id), d = r && r.perStudent[sid], v = d && (d.cat||{})[sj.id]; if(v!=='' && v!=null && !isNaN(Number(v))){ sum += Number(v); any = true; } });
+  return any ? sum : null;
+}
 // up to 3 staff names typed on the class: teacher, teacher2, teacher3
 const staffNames = cls => cls ? [cls.teacher, cls.teacher2, cls.teacher3].map(x=>String(x||'').trim()).filter(Boolean) : [];
 const joinHe = a => a.length<2 ? (a[0]||'') : a.slice(0,-1).join(', ') + ' ו' + a[a.length-1];
@@ -344,6 +359,7 @@ function migrateLoadedState(){
   st.printLetterhead = st.printLetterhead!==false;
   st.dashboardThresholds = Object.assign({absences:3, lates:3, low:70, high:85, change:20}, st.dashboardThresholds||{});
   if(st.failBelow===undefined) st.failBelow = 40;
+  st.pointsMax = st.pointsMax || {};
   st.classes.forEach(c=>{ if(c.failBelow===undefined) c.failBelow = st.failBelow; });   // each class has its own לא הצליח limit
   st.months.forEach(m=>{
     if(m.year){ m.year = normYear(m.year); return; }
@@ -371,7 +387,7 @@ function setStatus(kind){
    row "Undone" (no new row). Redo puts the change back again.
    Only your own changes are listed and can be undone.
    ===================================================================== */
-const TRACK = ['classes','staff','students','months','grades','sheets','reportStatus','sizes','layout','reportText','printLetterhead','reportPresets','dashboardThresholds','currentYear','failBelow'];
+const TRACK = ['classes','staff','students','months','grades','sheets','reportStatus','sizes','layout','reportText','printLetterhead','reportPresets','dashboardThresholds','currentYear','pointsMax','failBelow'];
 const SUBKEYED = new Set(['students','grades','sheets','reportStatus']);
 let audit = [];
 let snap = null;

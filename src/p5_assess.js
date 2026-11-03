@@ -112,7 +112,7 @@ function sheetLayout(cls, monthId){
   const rec = recFor(cls.id, monthId), wc = rec ? rec.weekCount : 4;
   return {
     rows: sortedStudents(cls.id).map(s=>({sid:s.id, nameHe: heName(s)})),
-    cols: buildColumnDefs(cls, wc).map(d=>Object.assign({type:d.type, id:d.id, week:d.week, he:d.he}, d.outOf ? {outOf:d.outOf} : {})),
+    cols: buildColumnDefs(cls, wc, rec).map(d=>Object.assign({type:d.type, id:d.id, week:d.week, he:d.he}, d.outOf ? {outOf:d.outOf} : {}, d.points ? {points:true} : {})),
     weekCount: wc,
     classHe: heName(cls), teacherHe: heName(teacherOf(cls)), staffN: staffNames(cls).length
   };
@@ -158,7 +158,7 @@ const SHEET_CSS = `
 .sheet table.sh{width:100%; border-collapse:collapse; table-layout:fixed;}
 .sheet table.sh th, .sheet table.sh td{border:1.2px solid #24434a; text-align:center; padding:1px 2px;}
 .sheet table.sh thead tr.g th{background:#0b4856; color:#fff; font-size:12px; font-weight:700; height:.3in;}
-.sheet table.sh thead tr.s th{background:#e6f0f1; color:#0b4856; font-size:10.5px; font-weight:700; word-break:keep-all; overflow-wrap:normal; hyphens:none; line-height:1.1; height:.32in; padding:1px 1px;}
+.sheet table.sh thead tr.s th{background:#e6f0f1; color:#0b4856; font-size:10.5px; font-weight:700; word-break:keep-all; overflow-wrap:normal; hyphens:none; line-height:1.1; height:.42in; padding:1px 1px;}
 .sheet table.sh th.wk .p{display:block; font-weight:400; font-size:10px; margin-top:2px; color:#d9e8e8; text-align:center; padding:0 2px;}
 .sheet table.sh th.wk .p span{display:inline-block; width:62%; border-bottom:1px solid #d5aa4e; height:12px;}
 .sheet table.sh td.nm{text-align:right; padding-right:6px; white-space:nowrap; overflow:hidden; font-weight:600;}
@@ -169,6 +169,10 @@ const SHEET_CSS = `
 .sheet table.sh td.val{font-size:15px; font-weight:700; color:#0b4856;}
 .sheet .pf{color:#fff; font-size:12px;}
 .sheet .oo{display:block; font-weight:400; font-size:9.5px; color:#3d6b74; direction:ltr;}
+.sheet .ntb{display:block; font-size:7px; color:#3d6b74; line-height:1; text-align:center; white-space:nowrap; overflow:hidden;}
+.sheet table.sh tfoot td{border:none; border-top:1.2px solid #24434a; padding:2px 1px 0; height:.14in; vertical-align:top; overflow:hidden;}
+.sheet table.sh tfoot td.gs{border-right:none !important;}
+.sheet table.sh.dense thead tr.s th{font-size:9px;}
 .sheet .sh-review{border:2px solid #d5aa4e; color:#0b4856; font-weight:700; padding:8px 14px; border-radius:6px; font-size:15px;}
 .sheet .sh-foot{position:absolute; bottom:.3in; left:.45in; right:.45in; font-size:10.5px; color:#5a7479; display:flex; justify-content:space-between;}
 `;
@@ -176,16 +180,21 @@ const SHEET_PRINT_HEAD = `<style>${SHEET_CSS} @page{size:letter landscape; margi
 const colGroup = c => c.type==='cat' ? 'cat' : c.type==='week' ? 'w'+c.week : 'att';
 const groupStarts = cols => cols.map((c,i)=> i===0 || colGroup(c)!==colGroup(cols[i-1]));
 // fill: {rec} prints the saved scores and parsha names (copy for the teacher to review)
-function sheetHtml(sh, monthLabel, fill, parsh){
+function sheetHtml(sh, monthLabel, fill, parsh, curRec){
   const L = sh.layout, logo = $('railLogo').src, gs = groupStarts(L.cols);
   const catCols = L.cols.filter(c=>c.type==='cat'), weekCols = L.cols.filter(c=>c.type==='week' && c.week===0);
   const n = Math.max(1, L.rows.length);
-  const rowH = Math.min(0.46, 5.55/n), fs = rowH < 0.2 ? 11 : rowH < 0.26 ? 12.5 : 14;
+  const rowH = Math.min(0.44, 5.3/n), fs = rowH < 0.2 ? 11 : rowH < 0.26 ? 12.5 : 14;
   const rec = fill && fill.rec, par = parsh || (rec ? rec.parshiot : []);
   let g = `<tr class="g"><th rowspan="2" style="width:.32in;">#</th><th rowspan="2" style="width:1.85in;">שם התלמיד</th><th colspan="3" class="gs">נוכחות</th>`;
   if(catCols.length) g += `<th colspan="${catCols.length}" class="gs">ציונים חודשיים (1–10)</th>`;
   for(let w=0; w<L.weekCount; w++) if(weekCols.length) g += `<th colspan="${weekCols.length}" class="wk gs">שבוע ${w+1}<span class="p">${par[w] ? `<b class="pf">${esc(par[w])}</b>` : 'פרשה: <span></span>'}</span></th>`;
-  let s = '<tr class="s">' + L.cols.map((c,i)=>`<th class="${gs[i]?'gs':''}">${esc((c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he).replace(/־/g,' '))}${c.outOf?`<span class="oo">/${c.outOf}</span>`:''}</th>`).join('');
+  const nowRec = curRec || rec;
+  let s = '<tr class="s">' + L.cols.map((c,i)=>{
+    let x = esc((c.type==='chesarim'?'חסר':c.type==='ichurim'?'איחור':c.type==='yatza'?'יצא מוקדם':c.he).replace(/־/g,' '));
+    if(c.outOf) x += `<span class="oo">/${c.outOf}</span>`;
+    return `<th class="${gs[i]?'gs':''}">${x}</th>`;
+  }).join('');
   const body = L.rows.map((r,i)=>{
     const d = rec && rec.perStudent[r.sid];
     return `<tr style="height:${rowH}in;"><td class="no">${i+1}</td><td class="nm" style="font-size:${fs}px;">${esc(r.nameHe)}</td>${L.cols.map((c,ci)=>`<td class="${gs[ci]?'gs':''}${fill?' val':''}">${d ? esc(cellValue(d, c)||'') : ''}</td>`).join('')}</tr>`;
@@ -194,12 +203,12 @@ function sheetHtml(sh, monthLabel, fill, parsh){
   return `<div class="sheet">${fill?'':'<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>'}
     <div class="sh-head"><img class="sh-logo" src="${logo}" alt=""><div class="sh-titles"><div class="sh-title">גליון הערכה · ${esc(monthLabel)}</div>
       <div class="sh-sub">כתה <b>${esc(L.classHe)}</b>${L.teacherHe?` · ${L.staffN>1?'המלמדים':'המלמד'} <b>${esc(L.teacherHe)}</b>`:''}</div></div>${right}</div>
-    <table class="sh"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody></table>
-    <div class="sh-foot"><span>${L.cols.some(c=>c.outOf) ? 'ציונים שבועיים: לפי הרשום בעמודה' : 'ציונים שבועיים 1–110'} · ציונים חודשיים 1–10 · נוכחות: מספר הפעמים (ריק = 0)</span><span>ישיבה יגדיל תורה</span></div></div>`;
+    <table class="sh${L.cols.length>16?' dense':''}"><thead>${g}</tr>${s}</tr></thead><tbody>${body}</tbody>${fill ? '' : `<tfoot><tr><td></td><td class="nt-lbl"></td>${L.cols.map((c,ci)=>`<td class="${gs[ci]?'gs':''}">${c.type==='week' ? `<span class="ntb">${noTestAt(nowRec, c.id, c.week) ? '●' : '○'} אין מבחן</span>` : ''}</td>`).join('')}</tr></tfoot>`}</table>
+    <div class="sh-foot"><span>${L.cols.some(c=>c.outOf) ? 'ציונים שבועיים: לפי הרשום בעמודה' : 'ציונים שבועיים 1–110'} · ציונים חודשיים 1–10${L.cols.some(c=>c.type==='week') ? ' · אין מבחן: מלא את העיגול שמתחת לעמודה' : ''} · נוכחות: מספר הפעמים (ריק = 0)</span><span>ישיבה יגדיל תורה</span></div></div>`;
 }
 // filled copy built from today's scores (no QR – not for scanning)
 function reviewSheetHtml(cls, monthId){ const m = monthById(monthId); return sheetHtml({code:'', layout: sheetLayout(cls, monthId)}, m ? m.label : '', {rec: recFor(cls.id, monthId)}, parshiotFor(cls.id, monthId)); }
-function sheetsHtml(keys){ return keys.map(k=>{ const sh = st.sheets[k], m = monthById(k.split('::')[1]); return sh && m ? sheetHtml(sh, m.label, null, parshiotFor(k.split('::')[0], m.id)) : ''; }).join(''); }
+function sheetsHtml(keys){ return keys.map(k=>{ const sh = st.sheets[k], m = monthById(k.split('::')[1]); return sh && m ? sheetHtml(sh, m.label, null, parshiotFor(k.split('::')[0], m.id), recFor(k.split('::')[0], m.id)) : ''; }).join(''); }
 function sheetDocs(keys){ return keys.filter(k=>st.sheets[k]).map(k=>{ const c = classById(k.split('::')[0]), m = monthById(k.split('::')[1]); return {name: 'גליון הערכה '+heName(c)+' '+(m?m.label:''), label: heName(c), html: sheetsHtml([k])}; }); }
 function printSheets(keys){ const h = sheetsHtml(keys); if(h) printHtml('Assessments', SHEET_PRINT_HEAD, h); }
 function downloadSheets(keys, name){ const docs = sheetDocs(keys); if(docs.length) askPdf(docs, {name, title:'Making assessment PDF', unit:'classes', css:SHEET_CSS, landscape:true, selector:'.sheet'}); }
@@ -263,7 +272,7 @@ function renderAssessments(){
     parRow = `<div class="par-set" dir="rtl">${shab}<div class="wk-row"><span class="lbl">פרשיות</span>${Array.from({length:wc}, (_,w)=>`<label data-tip="שבוע ${w+1}"><span>${w+1}</span><input type="text" class="parsha-all" data-idx="${w}" dir="rtl" value="${esc(par[w]||'')}" ${ed?'':'readonly'}></label>`).join('')}${w5}</div></div>`;
   }
   const detail = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${parRow}
-    ${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students</th><th>Sheet</th><th></th></tr></thead><tbody>${classes.map(c=>{
+    ${classes.length ? `<table class="t rtl-t" dir="rtl"><thead><tr><th>כתה</th><th>מלמד</th><th>תלמידים</th><th>גליון</th><th></th></tr></thead><tbody>${classes.map(c=>{
       const s = sheetState(c, month.id), sh = st.sheets[gradeKey(c.id, month.id)];
       return `<tr data-cid="${esc(c.id)}"><td>${he(heName(c))}</td><td>${he(heName(teacherOf(c)))}</td><td>${studentsOf(c.id).length}</td>
         <td>${STATE_TAG[s]} ${sh?`<span class="muted small" style="font-family:monospace;">${esc(sh.code)}</span>`:''}</td><td class="act">${sheetActs('data-cact', s)}</td></tr>`;
@@ -410,7 +419,7 @@ function colDescription(c){
   if(c.type==='chesarim') return 'Absent (חסר) – number of days, whole number';
   if(c.type==='ichurim') return 'Late (איחור) – number of times, whole number';
   if(c.type==='yatza') return 'Left early (יצא מוקדם) – number of times, whole number';
-  if(c.type==='cat') return `monthly score "${c.he}" – a number from 1 to 10`;
+  if(c.type==='cat') return c.points ? `monthly points "${c.he}" – the number of points earned this month (a whole number, can be large)` : `monthly score "${c.he}" – a number from 1 to 10`;
   return c.outOf ? `week ${c.week+1}, "${c.he}" – a mark out of ${c.outOf} (a number from 0 to ${c.outOf}; if written like "12/15" give just 12)` : `week ${c.week+1}, "${c.he}" – a score from 1 to 110`;
 }
 async function aiReadSheet(canvas, sh, page){
@@ -426,6 +435,8 @@ After the "#" and student-name columns, the score columns, reading from RIGHT to
 ${cols}
 
 Above each week's columns there is a line "פרשה:" where the teacher may have written the name of the parsha in Hebrew.
+Under the table, below each weekly test column, there is a small circle "○ אין מבחן" (no test this week). If the teacher filled in, ticked or circled it, report that column in "noTest". A circle printed already filled (●) also counts.
+Some weekly columns are printed "/15" (out of 15). If the teacher crossed out that number and wrote a different one (e.g. 10), report it in "outOf".
 
 Rules:
 - Read every row's own handwriting separately. Never copy one row's numbers into another row.
@@ -434,7 +445,7 @@ Rules:
 - Numbers only (digits), no words.
 
 Reply with JSON only, no prose:
-{"code":"<printed code in the top corner, e.g. GH-ABCDE-P1>","parsha":{"1":"<week 1 parsha or empty>"},"rows":[{"row":1,"name":"<printed name>","cells":{"c0":{"v":2,"sure":true}}}]}
+{"code":"<printed code in the top corner, e.g. GH-ABCDE-P1>","parsha":{"1":"<week 1 parsha or empty>"},"noTest":{"c7":true},"outOf":{"c9":10},"rows":[{"row":1,"name":"<printed name>","cells":{"c0":{"v":2,"sure":true}}}]}
 Include one entry per printed student row (rows with nothing written may have empty "cells").`;
   const txt = await aiCall([{type:'image', source:{type:'base64', media_type:'image/jpeg', data:canvasJpeg(canvas,2300,.92)}}, {type:'text', text:prompt}], 8000);
   const out = aiJson(txt), outRows = Array.isArray(out.rows) ? out.rows : [];
@@ -455,7 +466,10 @@ Include one entry per printed student row (rows with nothing written may have em
   });
   const parsha = {};
   if(out.parsha && typeof out.parsha==='object') Object.entries(out.parsha).forEach(([w,t])=>{ const n = Number(w); if(n>=1 && n<=5 && String(t||'').trim()) parsha[n-1] = String(t).trim(); });
-  return {values, unsure, parsha, code: out.code};
+  const noTest = {}, outOf = {};
+  if(out.noTest && typeof out.noTest==='object') Object.entries(out.noTest).forEach(([k,v])=>{ const ci = Number(String(k).replace(/^c/,'')); if(v && L.cols[ci] && L.cols[ci].type==='week') noTest[ci] = true; });
+  if(out.outOf && typeof out.outOf==='object') Object.entries(out.outOf).forEach(([k,v])=>{ const ci = Number(String(k).replace(/^c/,'')), n = Math.floor(Number(v)); if(n>0 && L.cols[ci] && L.cols[ci].type==='week' && n!==L.cols[ci].outOf) outOf[ci] = n; });
+  return {values, unsure, parsha, code: out.code, noTest, outOf};
 }
 
 /* ---------- files → page images ---------- */
@@ -515,7 +529,7 @@ async function processQueue(){
       const sh = st.sheets[pg.key];
       if(!sh){ pg.status = 'nomatch'; pg.key = null; renderScanArea(); continue; }
       const r = await aiReadSheet(pg.canvas, sh, pg.page);
-      Object.assign(pg, {values:r.values, unsure:r.unsure, parsha:r.parsha, status:'ready'});
+      Object.assign(pg, {values:r.values, unsure:r.unsure, parsha:r.parsha, noTest:r.noTest, outOf:r.outOf, status:'ready'});
     }catch(err){
       pg.status = 'error'; pg.error = err.message;
       if(err.credits || err.nokey){ scan.stop = true; scan.notice = err.message; }
@@ -568,7 +582,10 @@ function renderScanArea(){
       const rec = recFor(cls.id, month.id);
       const parsh = []; for(let w=0; w<L.weekCount; w++) parsh[w] = parshiotFor(cls.id, month.id)[w] || '';
       const problems = pageProblems(pg);
+      const hd = c => esc(c.he)+' · שבוע '+(c.week+1);
+      const marks = Object.keys(pg.noTest||{}).map(ci=>`<b>${hd(L.cols[+ci])}</b>: אין מבחן`).concat(Object.entries(pg.outOf||{}).map(([ci,n])=>`<b>${hd(L.cols[+ci])}</b>: /${n}`));
       detail = `${pg.status==='saved'?'<div class="notice">Saved to scores. You can still edit them on the Scores page.</div>':''}
+        ${marks.length && pg.status!=='saved' ? `<div class="notice warn he" dir="rtl">${marks.join(' · ')} <span dir="ltr" class="small">– applied when you save</span></div>` : ''}
         <div class="review"><div class="img" id="scanImg"><img src="${pg.img}" alt=""></div>
         <div style="min-width:0;">
           <div class="card-head"><h2>${pageTitleHtml(pg)}</h2>${problems?`<span class="tag warn">${problems} to check</span>`:'<span class="tag ok">Looks good</span>'}<span class="sp"></span>
@@ -626,6 +643,8 @@ function saveScanPage(pg, quiet){
   const [cid, mid] = pg.key.split('::'), cls = classById(cid), month = monthById(mid); if(!cls || !month) return;
   const rec = getGradeRecord(cid, mid), L = sh.layout;
   const ids = new Set(studentsOf(cid).map(s=>s.id));
+  Object.keys(pg.noTest||{}).forEach(ci=>{ const c = L.cols[+ci]; if(c) setNoTest(rec, c.id, c.week, true); });
+  Object.entries(pg.outOf||{}).forEach(([ci, n])=>{ const c = L.cols[+ci], sj = c && cls.subjects.find(x=>x.id===c.id); if(sj) setWeekOutOf(rec, sj, c.week, n); });
   Object.entries(pg.values||{}).forEach(([sid, cols])=>{
     if(!ids.has(sid)) return;
     if(!rec.perStudent[sid]) rec.perStudent[sid] = emptyStudentRecord(cls);

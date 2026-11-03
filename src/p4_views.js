@@ -36,15 +36,15 @@ const classLabel = c => heName(c);
    Averages
    ===================================================================== */
 function avgOf(arr){ const nums = arr.filter(v=>v!==''&&v!=null).map(Number).filter(n=>!isNaN(n)); return nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : null; }
-function studentOverallAvg(d, cls, wc){
-  const wv = []; cls.subjects.filter(s=>s.kind==='week').forEach(s=> (d.week[s.id]||[]).slice(0,wc).forEach(v=>{ if(v!=='') wv.push(weekPct(s, v)); }));
+function studentOverallAvg(d, cls, wc, rec){
+  const wv = []; cls.subjects.filter(s=>s.kind==='week').forEach(s=> (d.week[s.id]||[]).slice(0,wc).forEach((v,w)=>{ if(v!=='' && !noTestAt(rec, s.id, w)) wv.push(weekPctAt(rec, s, w, v)); }));
   const w = avgOf(wv);
-  const c = avgOf(cls.subjects.filter(s=>s.kind==='cat').map(s=> d.cat[s.id]==='' || d.cat[s.id]===undefined ? '' : Number(d.cat[s.id])*10));
+  const c = avgOf(cls.subjects.filter(s=>s.kind==='cat' && !isPoints(s)).map(s=> d.cat[s.id]==='' || d.cat[s.id]===undefined ? '' : Number(d.cat[s.id])*10));
   return avgOf([w, c].filter(v=>v!==null));
 }
 function studentYearAvg(cls, sid){
   const vals = [];
-  sortedMonths().forEach(m=>{ const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return; ensureRecordShape(d, cls); const v = studentOverallAvg(d, cls, rec.weekCount); if(v!==null) vals.push(v); });
+  sortedMonths().forEach(m=>{ const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return; ensureRecordShape(d, cls); const v = studentOverallAvg(d, cls, rec.weekCount, rec); if(v!==null) vals.push(v); });
   return avgOf(vals);
 }
 function unionSubjects(){ const map = new Map(); st.classes.forEach(c=> (c.subjects||[]).forEach(s=>{ const k = s.kind+'::'+s.label; if(!map.has(k)) map.set(k, {kind:s.kind, label:s.label}); })); return Array.from(map.values()); }
@@ -57,7 +57,7 @@ function classSubjectYearAvg(cls, subj){
     studentsOf(cls.id).forEach(s=>{
       const d = rec.perStudent[s.id]; if(!d) return; ensureRecordShape(d, cls);
       if(subj.kind==='cat'){ if(d.cat[match.id]!=='') vals.push(Number(d.cat[match.id])*10); }
-      else (d.week[match.id]||[]).slice(0,rec.weekCount).forEach(v=>{ if(v!=='') vals.push(weekPct(match, v)); });
+      else (d.week[match.id]||[]).slice(0,rec.weekCount).forEach((v,w)=>{ if(v!=='' && !noTestAt(rec, match.id, w)) vals.push(weekPctAt(rec, match, w, v)); });
     });
     const a = avgOf(vals); if(a!==null) monthly.push(a);
   });
@@ -86,7 +86,7 @@ function studentSubjectAvg(cls, sid, sj){
   const vals = [];
   sortedMonths().forEach(m=>{ const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return;
     if(sj.kind==='cat'){ const v = (d.cat||{})[sj.id]; if(v!=='' && v!=null && !isNaN(Number(v))) vals.push(Number(v)); }
-    else ((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).forEach(v=>{ if(v!=='' && v!=null && !isNaN(Number(v))) vals.push(Number(v)); });
+    else ((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).forEach((v,w)=>{ if(v!=='' && v!=null && !isNaN(Number(v)) && !noTestAt(rec, sj.id, w)) vals.push(weekPctAt(rec, sj, w, v)); });   // weekly: percent
   });
   return avgOf(vals);
 }
@@ -95,7 +95,7 @@ function subjMonthPct(cls, sid, sj, m){
   const rec = recFor(cls.id, m.id), d = rec && rec.perStudent[sid]; if(!d) return null;
   const ok = v => v!=='' && v!=null && !isNaN(Number(v));
   if(sj.kind==='cat'){ const v = (d.cat||{})[sj.id]; return ok(v) ? Number(v)*10 : null; }
-  const a = avgOf(((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).filter(ok).map(v=>weekPct(sj, v))); return a;
+  const a = avgOf(((d.week||{})[sj.id]||[]).slice(0, rec.weekCount).map((v,w)=> ok(v) && !noTestAt(rec, sj.id, w) ? weekPctAt(rec, sj, w, v) : '')); return a;
 }
 // last month with a score compared with the month before it that had one
 function subjChange(cls, sid, sj){
@@ -111,52 +111,67 @@ function saveDashLimits(){
     return; }
   persistState();   // test version
 }
+/* Dashboard: class cards, a class × subject color grid, and one row per boy to watch */
+let dashMonth = '', dashOpen = {};
 function renderDashboard(){
-  const T = st.dashboardThresholds, P = $('panel-dashboard');
-  const all = [], low = [];
-  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=>{
-    all.push(Object.assign({cls, s}, studentTotals(cls, s.id)));
-    (cls.subjects||[]).forEach(sj=>{
-      const a = studentSubjectAvg(cls, s.id, sj); if(a===null) return;
-      const pct = sj.kind==='cat' ? a*10 : weekPct(sj, a);
-      if(pct < T.low) low.push({cls, s, sj, a, pct});
+  const T = st.dashboardThresholds, P = $('panel-dashboard'), months = sortedMonths();
+  const withData = months.filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id)));
+  if(dashMonth && dashMonth!=='year' && !months.some(m=>m.id===dashMonth)) dashMonth = '';
+  if(!dashMonth) dashMonth = (withData[withData.length-1] || {}).id || 'year';
+  const one = dashMonth==='year' ? null : monthById(dashMonth);
+  const inRange = one ? [one] : months;
+  const tone = v => v===null ? '' : v < T.low ? 'bad' : v >= T.high ? 'good' : 'mid';
+  const ok = v => v!=='' && v!=null && !isNaN(Number(v));
+  // one subject for one student over the period, as a percent
+  const subjPct = (cls, sid, sj) => { const v = []; inRange.forEach(m=>{ const p = subjMonthPct(cls, sid, sj, m); if(p!==null) v.push(p); }); return avgOf(v); };
+  const att = (cls, sid) => { let ab = 0, la = 0; inRange.forEach(m=>{ const r = recFor(cls.id, m.id), d = r && r.perStudent[sid]; if(!d) return; if(ok(d.chesarim)) ab += Number(d.chesarim); if(ok(d.ichurim)) la += Number(d.ichurim); }); return {ab, la}; };
+  // change: this month (or the last month with scores) against the month before it with scores
+  const change = (cls, sid, sj) => {
+    const upto = one ? months.indexOf(one) : months.length-1;
+    const pts = months.slice(0, upto+1).map(m=>({m, v: subjMonthPct(cls, sid, sj, m)})).filter(x=>x.v!==null);
+    if(pts.length<2 || (one && pts[pts.length-1].m!==one)) return null;
+    const a = pts[pts.length-2], b = pts[pts.length-1]; return {diff: b.v-a.v, from:a, to:b};
+  };
+  const subjAll = []; st.classes.forEach(c=> (c.subjects||[]).filter(s=>!isPoints(s)).forEach(s=>{ if(!subjAll.some(x=>x.label===s.label)) subjAll.push({label:s.label, kind:s.kind}); }));
+  const classes = st.classes.map(cls=>{
+    const subs = (cls.subjects||[]).filter(s=>!isPoints(s));
+    const boys = [], bySubj = {};
+    let abT = 0, all = [];
+    studentsOf(cls.id).forEach(s=>{
+      const tags = [], a = att(cls, s.id); abT += a.ab;
+      subs.forEach(sj=>{
+        const p = subjPct(cls, s.id, sj); if(p!==null){ (bySubj[sj.label] = bySubj[sj.label] || []).push(p); all.push(p); if(p < T.low) tags.push({k:'bad', t:`${sj.label} ${Math.round(p)}%`, w: T.low-p}); }
+        if(sj.kind==='week' && T.change>0){ const ch = change(cls, s.id, sj); if(ch && Math.abs(ch.diff)>=T.change) tags.push({k: ch.diff>0?'good':'bad', t:`${ch.diff>0?'▲':'▼'} ${Math.round(Math.abs(ch.diff))} ${sj.label}`, w: ch.diff>0 ? 0 : Math.abs(ch.diff), tip:`${monthShort(ch.from.m.label)} ${Math.round(ch.from.v)}% → ${monthShort(ch.to.m.label)} ${Math.round(ch.to.v)}%`}); }
+      });
+      if(tags.length) boys.push({s, tags, score: tags.filter(t=>t.k!=='good').reduce((n,t)=>n+1+t.w/100,0)});
     });
-  }));
-  low.sort((x,y)=>x.pct-y.pct);
-  const changed = [];
-  st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=> (cls.subjects||[]).filter(sj=>sj.kind==='week').forEach(sj=>{
-    const ch = subjChange(cls, s.id, sj); if(!ch || Math.abs(ch.diff) < T.change || T.change<=0) return;
-    changed.push({cls, s, sj, ch});
-  })));
-  changed.sort((a,b)=> Math.abs(b.ch.diff)-Math.abs(a.ch.diff));
-  const nUp = changed.filter(r=>r.ch.diff>0).length, nDown = changed.length - nUp;
-  const abs = all.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab);
-  const lat = all.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
-  const monthsWith = sortedMonths().filter(m=> st.classes.some(c=>monthHasScores(c.id, m.id))).length;
-  const thr = k => `<input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0">`;
-  const fmt = r => Math.round(r.pct)+'%';
-  const chg = r => (r.ch.diff>0?'▲ ':'▼ ')+Math.round(Math.abs(r.ch.diff));
-  const chgTip = r => `${monthShort(r.ch.from.m.label)} ${Math.round(r.ch.from.v)} → ${monthShort(r.ch.to.m.label)} ${Math.round(r.ch.to.v)}`;
-  const list = (rows, val, klass, sub, tip) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}" ${tip?`data-tip="${esc(tip(r))}"`:''}><span class="v ${typeof klass==='function'?klass(r):klass}">${val(r)}</span>${sub?`<span class="sj he">${esc(r.sj.label)}</span>`:''}<span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
-  P.innerHTML = pageHead('Dashboard', `<span class="tag wait he" style="font-size:13px;">${esc(st.currentYear)}</span>`) + `
-    <div class="stat-grid three">
-      <div class="stat"><div class="n">${all.length}</div><div class="l">Students</div></div>
-      <div class="stat"><div class="n">${st.classes.length}</div><div class="l">Classes</div></div>
-      <div class="stat"><div class="n">${monthsWith}</div><div class="l">Months with scores</div></div>
+    boys.sort((x,y)=> y.score-x.score);
+    const watch = boys.filter(b=> b.tags.some(t=>t.k!=='good')).length;
+    return {cls, avg: avgOf(all), bySubj, boys, watch, abT, n: studentsOf(cls.id).length};
+  });
+  const thr = (k, suffix) => `<label class="db-thr">${({low:'Below', absences:'Absences over', lates:'Lates over', change:'Up or down by'})[k]} <input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0">${suffix||''}</label>`;
+  const pct = v => v===null ? '—' : Math.round(v)+'%';
+  // absences and lates (the period picked at the top), one list each
+  const attAll = []; st.classes.forEach(cls=> studentsOf(cls.id).forEach(s=> attAll.push(Object.assign({cls, s}, att(cls, s.id)))));
+  const absList = attAll.filter(r=>r.ab > T.absences).sort((a,b)=>b.ab-a.ab), latList = attAll.filter(r=>r.la > T.lates).sort((a,b)=>b.la-a.la);
+  const attThr = k => `<input type="number" class="thr" data-thr="${k}" value="${T[k]}" min="0">`;
+  const attList = (rows, k, kl) => rows.length ? `<div class="dlist">${rows.map(r=>`<button type="button" class="drow" data-cls="${esc(r.cls.id)}" data-sid="${esc(r.s.id)}"><span class="v ${kl}">${r[k]}</span><span class="c he">${esc(heName(r.cls))}</span><span class="n he">${esc(heName(r.s))}</span></button>`).join('')}</div>` : '<div class="empty">None</div>';
+  P.innerHTML = pageHead('Dashboard', `<select id="dbMonth" dir="rtl"><option value="year" ${dashMonth==='year'?'selected':''}>כל השנה · ${esc(st.currentYear)}</option>${options(months, m=>m.id, m=>m.label, dashMonth)}</select>`) + `
+    <div class="dash-cols two db-att">
+      <div class="card ins low"><h2>Absences over ${attThr('absences')} <span class="pill">${absList.length}</span></h2>${attList(absList, 'ab', 'bad')}</div>
+      <div class="card ins warn"><h2>Lates over ${attThr('lates')} <span class="pill">${latList.length}</span></h2>${attList(latList, 'la', 'mid')}</div>
     </div>
-    <div class="dash-cols three">
-      <div class="card ins low"><h2>Below ${thr('low')}% by subject <span class="pill">${low.length}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Year average below ${T.low}% · monthly 1–10 count ×10 · "out of" subjects as a percent</div>${list(low, fmt, 'bad', true)}</div>
-      <div class="card ins low"><h2>Absences over ${thr('absences')} <span class="pill">${abs.length}</span></h2>${list(abs, r=>r.ab, 'bad')}</div>
-      <div class="card ins warn"><h2>Lates over ${thr('lates')} <span class="pill">${lat.length}</span></h2>${list(lat, r=>r.la, 'mid')}</div>
-    </div>
-    <div class="dash-cols one">
-      <div class="card ins chg"><h2>Changed by ${thr('change')} or more <span class="pill up">▲ ${nUp}</span><span class="pill down">▼ ${nDown}</span></h2><div class="small muted" style="margin:-6px 0 8px;">Weekly scores · last month's average compared with the month before · <span class="t-good">▲ went up</span> · <span class="t-bad">▼ went down</span></div>${list(changed, chg, r=> r.ch.diff>0 ? 'good' : 'bad', true, chgTip)}</div>
+    <div class="card"><h2>Class averages by subject</h2>${subjAll.length && classes.length ? `<div class="scroll-x"><table class="db-grid" dir="rtl" style="width:100%;"><thead><tr><th>כתה</th>${subjAll.map(s=>`<th>${esc(s.label)}</th>`).join('')}</tr></thead><tbody>${classes.map(x=>`<tr><th class="he">${esc(heName(x.cls))}</th>${subjAll.map(s=>{ const a = avgOf(x.bySubj[s.label]||[]); return a===null ? '<td class="na">—</td>' : `<td class="${tone(a)}">${Math.round(a)}%</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>` : '<div class="empty">No scores yet</div>'}</div>
+    <div class="card"><div class="card-head"><h2 class="he">תלמידים לתשומת לב</h2><span class="db-thrs">${thr('low','%')}${thr('change','%')}</span><span class="sp"></span><button class="btn sec sm" id="dbAll">${classes.every(x=>dashOpen[x.cls.id]) ? 'Close all' : 'Open all'}</button></div>
+      ${classes.map(x=>`<div class="db-grp ${dashOpen[x.cls.id]?'open':''}" data-g="${esc(x.cls.id)}"><button type="button" class="db-ghead"><span class="chev">▸</span><b class="he">${esc(heName(x.cls))}</b><span class="pill ${x.watch?'w':''}">${x.watch}</span><span class="muted small">${x.boys.length - x.watch ? (x.boys.length - x.watch)+' went up' : ''}</span></button>
+        <div class="db-gbody">${x.boys.length ? x.boys.map(b=>`<div class="db-boy"><a href="#" class="he" data-cls="${esc(x.cls.id)}" data-sid="${esc(b.s.id)}">${esc(heName(b.s))}</a><span class="db-tags" dir="rtl">${b.tags.map(t=>`<span class="tag ${t.k}" ${t.tip?`data-tip="${esc(t.tip)}"`:''}>${esc(t.t)}</span>`).join('')}</span></div>`).join('') : '<div class="muted small" style="padding:8px 4px;">Nothing to watch</div>'}</div></div>`).join('')}
     </div>`;
-  P.querySelectorAll('.thr').forEach(inp=> inp.addEventListener('change', ()=>{
-    st.dashboardThresholds[inp.dataset.thr] = Math.max(0, Math.floor(Number(inp.value)||0));
-    saveDashLimits(); renderDashboard();
-  }));
+  $('dbMonth').onchange = e=>{ dashMonth = e.target.value; renderDashboard(); };
+  P.querySelectorAll('.thr').forEach(inp=> inp.addEventListener('change', ()=>{ st.dashboardThresholds[inp.dataset.thr] = Math.max(0, Math.floor(Number(inp.value)||0)); saveDashLimits(); renderDashboard(); }));
   P.querySelectorAll('.drow').forEach(b=> b.addEventListener('click', ()=> openProfile(b.dataset.cls, b.dataset.sid)));
+  P.querySelectorAll('.db-ghead').forEach(h=> h.addEventListener('click', ()=>{ const g = h.parentElement, id = g.dataset.g; dashOpen[id] = !dashOpen[id]; g.classList.toggle('open', !!dashOpen[id]); }));
+  $('dbAll').onclick = ()=>{ const allOpen = classes.every(x=>dashOpen[x.cls.id]); dashOpen = {}; if(!allOpen) classes.forEach(x=> dashOpen[x.cls.id] = true); renderDashboard(); };
+  P.querySelectorAll('.db-boy a').forEach(a=> a.addEventListener('click', e=>{ e.preventDefault(); openProfile(a.dataset.cls, a.dataset.sid); }));
 }
 
 /* =====================================================================
@@ -175,7 +190,7 @@ function renderProfile(){
   const rows = months.map(m=>{
     const rec = recFor(cls.id, m.id), d = ensureRecordShape(clone(rec.perStudent[s.id]), cls);
     const wAvg = sj => avgOf((d.week[sj.id]||[]).slice(0, rec.weekCount));
-    return {m, rec, d, avg: studentOverallAvg(d, cls, rec.weekCount), wAvg};
+    return {m, rec, d, avg: studentOverallAvg(d, cls, rec.weekCount, rec), wAvg};
   });
   const T = st.dashboardThresholds, tone = v => v===null ? '' : v < T.low ? 'bad-cell' : v >= T.high ? 'good-cell' : '';
   const trend = rows.length ? `<div class="trend">${rows.map(r=>{ const v = r.avg===null ? 0 : Math.round(r.avg); return `<div class="tb"><div class="bar-wrap"><div class="bar ${v<T.low?'b':v>=T.high?'g':''}" style="height:${Math.min(100, Math.max(4,v))}%"></div></div><b>${r.avg===null?'—':v}</b><span class="he">${esc(monthShort(r.m.label))}</span></div>`; }).join('')}</div>` : '<div class="empty">No scores yet</div>';
@@ -262,7 +277,7 @@ function renderStudents(){
   const inClass = stuFilter ? all.filter(r=>r.c.id===stuFilter) : all;
   const q = stuSearch.trim().toLowerCase();
   const shown = q ? inClass.filter(r=> (enName(r.s)+' '+(r.s.nameHe||'')).toLowerCase().includes(q)) : inClass;
-  const chips = `<div class="tabs" style="margin-bottom:12px;">${[{id:'', label:'All', n:all.length}].concat(st.classes.map(c=>({id:c.id, label:classLabel(c), n:studentsOf(c.id).length}))).map(t=>`<button data-f="${esc(t.id)}" class="${t.id===stuFilter?'on':''}">${esc(t.label)} <span class="pill" style="height:18px;font-size:11px;">${t.n}</span></button>`).join('')}</div>`;
+  const chips = `<div class="tabs" dir="rtl" style="margin-bottom:12px;">${[{id:'', label:'הכל', n:all.length}].concat(st.classes.map(c=>({id:c.id, label:classLabel(c), n:studentsOf(c.id).length}))).map(t=>`<button data-f="${esc(t.id)}" class="${t.id===stuFilter?'on':''}">${esc(t.label)} <span class="pill" style="height:18px;font-size:11px;">${t.n}</span></button>`).join('')}</div>`;
   const addCls = stuFilter || (st.classes[0] && st.classes[0].id) || '';
   P.innerHTML = pageHead('Students', `<button class="btn sec" id="pasteStu">${ICON.plus}Paste / upload list</button>`) + `
     ${st.classes.length ? '' : '<div class="notice warn">Add a class first in Settings → Classes.</div>'}
@@ -380,17 +395,18 @@ function openPasteStudents(){
    Scores – Hebrew, right to left. Tab moves across, Enter moves down.
    ===================================================================== */
 let scoreClassId = '', scoreMonthId = '';
-function buildColumnDefs(cls, wc){
+// rec (optional): that month's record, for a week that is out of a different number or has no test
+function buildColumnDefs(cls, wc, rec){
   const defs = [{type:'chesarim', he:'חסר'},{type:'ichurim', he:'איחור'},{type:'yatza', he:'יצא מוקדם'}];
-  cls.subjects.filter(s=>s.kind==='cat').forEach(s=> defs.push({type:'cat', id:s.id, he:s.label}));
+  cls.subjects.filter(s=>s.kind==='cat').forEach(s=> defs.push(Object.assign({type:'cat', id:s.id, he:s.label}, isPoints(s) ? {points:true} : {})));
   const ws = cls.subjects.filter(s=>s.kind==='week');
-  for(let w=0; w<wc; w++) ws.forEach(s=> defs.push(Object.assign({type:'week', id:s.id, week:w, he:s.label}, outOfNum(s) ? {outOf: outOfNum(s)} : {})));
+  for(let w=0; w<wc; w++) ws.forEach(s=>{ const o = outOfAt(rec, s, w); defs.push(Object.assign({type:'week', id:s.id, week:w, he:s.label}, o ? {outOf:o} : {}, outOfNum(s) ? {baseOutOf:outOfNum(s)} : {}, noTestAt(rec, s.id, w) ? {noTest:true} : {})); });
   return defs;
 }
 function validCell(def, raw){
   const v = String(raw??'').trim(); if(v==='') return true;
   const n = Number(v); if(isNaN(n)) return false;
-  if(def.type==='cat') return n>=1 && n<=10;
+  if(def.type==='cat') return def.points ? Number.isInteger(n) && n>=0 : n>=1 && n<=10;
   if(def.type==='week') return n>=0 && n<=weekMaxOf(def);
   return Number.isInteger(n) && n>=0 && n<=31;
 }
@@ -404,8 +420,16 @@ function gridHead(cls, wc, parshiot, editable){
     if(!weekS.length) continue;
     g += `<th colspan="${weekS.length}" class="wkh gs"><div class="wk">שבוע ${w+1}</div><div class="parsha-ro" data-tip="Set in Assessments">${esc(parshiot[w]||'—')}</div></th>`;
   }
-  const defs = buildColumnDefs(cls, wc), gs = groupStarts(defs);
-  g += '</tr><tr>' + defs.map((d,i)=>`<th class="${gs[i]?'gs':''}">${esc(d.he)}${d.outOf?` <span class="oo">/${d.outOf}</span>`:''}</th>`).join('');
+  const defs = buildColumnDefs(cls, wc, recFor(cls.id, scoreMonthId)), gs = groupStarts(defs);
+  g += '</tr><tr>' + defs.map((d,i)=>{
+    let x = esc(d.he);
+    if(d.points) x += ` <span class="oo">נק'</span>`;
+    if(d.type==='week'){
+      if(d.baseOutOf) x += editable ? `<span class="oo">/<input type="text" inputmode="numeric" class="ow" data-ow="${i}" value="${d.outOf}" data-tip="Out of – this week only"></span>` : `<span class="oo">/${d.outOf}</span>`;
+      else if(d.outOf) x += `<span class="oo">/${d.outOf}</span>`;
+    }
+    return `<th class="${gs[i]?'gs':''}${d.noTest?' nt-col':''}">${x}</th>`;
+  }).join('');
   return g + '</tr>';
 }
 function renderScores(){
@@ -426,18 +450,22 @@ function renderScores(){
 function renderScoresGrid(){
   const box = $('scGrid'), cls = classById(scoreClassId), month = monthById(scoreMonthId);
   if(!cls || !month){ box.innerHTML = `<div class="empty">${st.classes.length?'Pick a class and month':'Add a class first in Settings → Classes'}</div>`; return; }
-  const rec = getGradeRecord(cls.id, month.id), wc = rec.weekCount, defs = buildColumnDefs(cls, wc), students = sortedStudents(cls.id), gs = groupStarts(defs);
+  const rec = getGradeRecord(cls.id, month.id), wc = rec.weekCount, defs = buildColumnDefs(cls, wc, rec), students = sortedStudents(cls.id), gs = groupStarts(defs);
   const label = enName(cls)+' · '+month.label;
   const ro = !canEdit();
   box.innerHTML = `${ro?'<div class="notice">View only</div>':''}<div class="grid-wrap" dir="rtl"><table class="entry rtl ${ro?'ro':''}"><thead>${gridHead(cls, wc, parshiotFor(cls.id, month.id), !ro)}</thead><tbody>${
     students.length ? students.map((s,r)=>{
       if(!rec.perStudent[s.id]) rec.perStudent[s.id] = emptyStudentRecord(cls);
       const d = ensureRecordShape(rec.perStudent[s.id], cls);
-      return `<tr><td class="name"><a href="#" class="stu-link" data-sid="${esc(s.id)}">${esc(heName(s))}</a></td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}"><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}" ${ro?'readonly tabindex="-1"':''}></td>`; }).join('') + '</tr>';
+      return `<tr><td class="name"><a href="#" class="stu-link" data-sid="${esc(s.id)}">${esc(heName(s))}</a></td>` + defs.map((def,c)=>{ const v = cellValue(d, def)||''; return `<td class="${validCell(def,v)?'':'bad'}${gs[c]?' gs':''}${def.noTest?' nt-col':''}"${def.points?` data-tip="Total ${pointsTotal(cls, s.id, cls.subjects.find(x=>x.id===def.id), month) ?? 0}${pointsHigh(month)?' / '+pointsHigh(month):''}"`:''}><input type="text" inputmode="numeric" data-row="${r}" data-col="${c}" value="${esc(v)}" ${ro||def.noTest?'readonly tabindex="-1"':''} ${def.noTest?'placeholder="—"':''}></td>`; }).join('') + '</tr>';
     }).join('') : `<tr><td colspan="${defs.length+1}"><div class="empty">No students in this class</div></td></tr>`
-  }</tbody></table></div>`;
+  }</tbody>${students.length && defs.some(d=>d.type==='week') ? `<tfoot><tr><td class="name nt-foot"></td>${defs.map((d,c)=>`<td class="${gs[c]?'gs':''}">${d.type==='week' ? `<button type="button" class="skip ${d.noTest?'on':''}" data-nt="${c}" ${ro?'disabled':''} data-tip="${d.noTest?'Click to undo':'No test this week – the whole class'}">${d.noTest?'●':'○'} אין מבחן</button>` : ''}</td>`).join('')}</tr></tfoot>` : ''}</table></div>`;
   box.querySelectorAll('.stu-link').forEach(a=> a.addEventListener('click', e=>{ e.preventDefault(); openProfile(cls.id, a.dataset.sid); }));
   if(ro) return;
+  // header: "no test" for the whole class, and a week "out of" a different number
+  const refreshSheet = ()=>{ const sh = st.sheets[gradeKey(cls.id, month.id)]; if(sh && !sh.scannedAt){ sh.layout = sheetLayout(cls, month.id); sh.sig = layoutSig(sh.layout); } };
+  box.querySelectorAll('[data-nt]').forEach(cb=> cb.addEventListener('click', ()=>{ const d = defs[+cb.dataset.nt], on = !noTestAt(rec, d.id, d.week); setNoTest(rec, d.id, d.week, on); saveAll(on ? 'No test' : 'Test back', d.he+' · שבוע '+(d.week+1)+' · '+label); renderScoresGrid(); }));
+  box.querySelectorAll('[data-ow]').forEach(inp=> inp.addEventListener('focus', ()=> inp.select()) || inp.addEventListener('keydown', e=>{ if(e.key==='Enter') inp.blur(); }) || inp.addEventListener('change', ()=>{ const d = defs[+inp.dataset.ow], sj = cls.subjects.find(x=>x.id===d.id), n = Math.floor(Number(inp.value)); setWeekOutOf(rec, sj, d.week, n>0 ? n : 0); refreshSheet(); saveAll('Week out of', d.he+' · שבוע '+(d.week+1)+' · /'+outOfAt(rec, sj, d.week)+' · '+label); renderScoresGrid(); }));
   const inputs = Array.from(box.querySelectorAll('tbody input'));
   inputs.forEach(inp=>{
     inp.addEventListener('input', ()=>{

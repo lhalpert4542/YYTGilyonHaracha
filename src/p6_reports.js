@@ -40,13 +40,19 @@ function reportPageHtml(cls, month, s, rec, opt){
     const classWeek = i => rec && Object.values(rec.perStudent||{}).some(x=> weekS.some(w=> filled(((x.week||{})[w.id]||[])[i])));
     const miss = `<span class="miss">${esc(st.reportText.missingText||'חסר')}</span>`;
     for(let i=0;i<wc;i++){
+      if(weekS.every(w=>noTestAt(rec, w.id, i))) continue;                 // no tests at all that week
       if(!classWeek(i) && !String(typed[i]||'').trim()) continue;
-      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{ const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v, cls, w) : miss}</td>`; }).join('')}</tr>`;
+      rows += `<tr><td>${esc(par[i]||('שבוע '+(i+1)))}</td>${weekS.map(w=>{
+        if(noTestAt(rec, w.id, i)) return '<td>—</td>';                   // no test that week: not חסר
+        const v = (d.week[w.id]||[])[i]; return `<td>${filled(v) ? reportScore(v, cls, {outOf: outOfAt(rec, w, i)}) : miss}</td>`; }).join('')}</tr>`;
     }
     if(!rows) rows = `<tr><td colspan="${weekS.length+1}">—</td></tr>`;
     weekHtml = `<table class="rtab"><tr><th>${esc(st.reportText.weekHeader)}</th>${weekS.map(w=>`<th>${esc(w.label)}</th>`).join('')}</tr>${rows}</table>`;
   }
-  const catHtml = catS.length ? `<div class="catline">${rtHtml('scoreNote',ctx)}</div><table class="rtab"><tr>${catS.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr><tr>${catS.map(c=>`<td>${esc(d.cat[c.id]||'')}</td>`).join('')}</tr></table>` : '';
+  const catHtml = catS.length ? `<div class="catline">${rtHtml('scoreNote',ctx)}</div><table class="rtab"><tr>${catS.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr><tr>${catS.map(c=>{
+      if(!isPoints(c)) return `<td>${esc(d.cat[c.id]||'')}</td>`;
+      const tot = pointsTotal(cls, s.id, c, month), hi = pointsHigh(month);      // points add up month to month: 125/150
+      return `<td>${tot===null ? '' : hi ? `<bdi dir="ltr">${tot}/${hi}</bdi>` : tot}</td>`; }).join('')}</tr></table>` : '';
   const L = st.layout;
   const lh = opt.letterhead ? `background-image:url('${currentLetterheadDataUrl}');` : '';
   return `<div class="report-page" style="${lh}${sizeVars()}">
@@ -148,7 +154,7 @@ function renderReports(){
       <div class="acts">${seg('Review', b('rview','view','View review sheets')+b('rprint','print','Print review sheets')+b('rpdf','download','Review sheets PDF'))}${seg('Reports', b('view','view','View reports')+b('print','print','Print reports')+b('pdf','download','Reports PDF'))}</div></div>`;
   }).join('');
   const month = monthById(repMonthId);
-  const table = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${classes.length ? `<table class="t"><thead><tr><th>Class</th><th>Teacher</th><th>Students with scores</th><th></th></tr></thead><tbody>${classes.map(c=>{
+  const table = month ? `<div class="card"><div class="card-head"><h2 class="he">${esc(month.label)}</h2></div>${classes.length ? `<table class="t rtl-t" dir="rtl"><thead><tr><th>כתה</th><th>מלמד</th><th>תלמידים עם ציונים</th><th></th></tr></thead><tbody>${classes.map(c=>{
       const n = studentsOf(c.id).length, rec = recFor(c.id, month.id), filled = rec ? studentsOf(c.id).filter(s=>hasAnyScore(rec.perStudent[s.id])).length : 0, dis = filled ? '' : 'disabled';
       const b = (act, icon, tip) => `<button type="button" class="icon-btn" data-ract="${act}" data-tip="${tip}" ${dis}>${ICON[icon]}</button>`;
       return `<tr data-cid="${esc(c.id)}" class="click ${repSel&&repSel.classId===c.id?'sel':''}"><td>${he(heName(c))}</td><td>${he(heName(teacherOf(c)))}</td>
