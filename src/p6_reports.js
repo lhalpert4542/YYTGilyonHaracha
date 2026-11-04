@@ -66,7 +66,7 @@ function reportPageHtml(cls, month, s, rec, opt){
       ${weekHtml}${catHtml}
       <table class="rtab"><tr><th>${esc(st.reportText.lateHeader)}</th><th>${esc(st.reportText.absentHeader)}</th><th>${esc(st.reportText.earlyHeader)}</th></tr>
         <tr><td>${esc(d.ichurim||'')}</td><td>${esc(d.chesarim||'')}</td><td>${esc(d.yatza||'')}</td></tr></table>
-      <div class="signline"><span>${rtHtml('signature',ctx)}</span><span class="rule"></span></div>
+      ${st.showSignature===false ? '' : `<div class="signline"><span>${rtHtml('signature',ctx)}</span><span class="rule"></span></div>`}
     </div></div>${opt.copyMark?`<div class="copy-mark">${esc(opt.copyMark)}</div>`:''}
   </div>`;
 }
@@ -219,7 +219,7 @@ function renderReportSetup(box){
       <div class="sizes">${[['topMM','Top'],['bottomMM','Bottom'],['rightMM','Right'],['leftMM','Left']].map(([k,l])=>`<div class="field"><label>${l}</label><input type="number" min="0" max="140" data-margin="${k}" value="${L[k]}"></div>`).join('')}</div>
       <div class="row" style="margin-top:10px;"><label class="btn sec" for="lhFile" style="cursor:pointer;">Upload letterhead</label><input type="file" id="lhFile" accept="image/*,.pdf" style="display:none;"><button class="btn sec" id="lhReset">Default letterhead</button></div></div></details>
     <details class="grp" open><summary>Text Sizes</summary><div class="body"><div class="sizes">${Object.keys(SIZE_LABELS).map(k=>`<div class="field"><label>${SIZE_LABELS[k]}</label><input type="number" min="8" max="60" data-size="${k}" value="${st.sizes[k]}"></div>`).join('')}</div></div></details>
-    <details class="grp"><summary>Report Text</summary><div class="body"><div class="fields">${REPORT_TEXT_FIELDS.map(([k,l,full])=>`<div class="field ${full||''}"><label>${esc(l)}</label>${['lead','note'].includes(k)?`<textarea dir="rtl" data-rt="${k}">${esc(st.reportText[k]||'')}</textarea>`:`<input type="text" dir="rtl" data-rt="${k}" value="${esc(st.reportText[k]||'')}">`}</div>`).join('')}</div></div></details>
+    <details class="grp" open><summary>Report Text</summary><div class="body"><label class="sig-tg"><input type="checkbox" id="showSig" ${st.showSignature===false?'':'checked'}> Show the parents' signature line</label><div class="fields">${REPORT_TEXT_FIELDS.map(([k,l,full])=>`<div class="field ${full||''}"><label>${esc(l)}</label>${['lead','note'].includes(k)?`<textarea dir="rtl" data-rt="${k}">${esc(st.reportText[k]||'')}</textarea>`:`<input type="text" dir="rtl" data-rt="${k}" value="${esc(st.reportText[k]||'')}">`}</div>`).join('')}</div></div></details>
   </div><div>
     <div class="row" style="margin-bottom:8px;"><select id="spCls">${options(st.classes, c=>c.id, classLabel, setupPv.classId)}</select><select id="spStu" dir="rtl"></select><select id="spMonth" dir="rtl">${options(sortedMonths(), m=>m.id, m=>m.label, setupPv.monthId)}</select></div>
     <div class="preview-box"><div id="spPv" style="width:100%;"></div></div></div></div>`;
@@ -237,6 +237,7 @@ function renderReportSetup(box){
   $('spMonth').onchange = e=>{ setupPv.monthId = e.target.value; pv(); };
   box.querySelectorAll('[data-margin]').forEach(i=> i.addEventListener('input', ()=>{ st.layout[i.dataset.margin] = Math.max(0, Number(i.value)||0); saveAll('Report margins'); pv(); }));
   box.querySelectorAll('[data-size]').forEach(i=> i.addEventListener('input', ()=>{ st.sizes[i.dataset.size] = Math.min(60, Math.max(8, Number(i.value)||12)); saveAll('Report text sizes'); pv(); }));
+  $('showSig').onchange = e=>{ st.showSignature = e.target.checked; saveAll('Signature on reports', e.target.checked ? 'on' : 'off'); pv(); };
   box.querySelectorAll('[data-rt]').forEach(i=> i.addEventListener('input', ()=>{ st.reportText[i.dataset.rt] = i.value; saveAll('Report text'); pv(); }));
   $('lhFile').onchange = async e=>{
     const f = e.target.files[0]; e.target.value = ''; if(!f) return;

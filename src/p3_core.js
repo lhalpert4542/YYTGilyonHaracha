@@ -387,7 +387,7 @@ function setStatus(kind){
    row "Undone" (no new row). Redo puts the change back again.
    Only your own changes are listed and can be undone.
    ===================================================================== */
-const TRACK = ['classes','staff','students','months','grades','sheets','reportStatus','sizes','layout','reportText','printLetterhead','reportPresets','dashboardThresholds','currentYear','pointsMax','failBelow'];
+const TRACK = ['classes','staff','students','months','grades','sheets','reportStatus','sizes','layout','reportText','printLetterhead','reportPresets','dashboardThresholds','currentYear','pointsMax','showSignature','failBelow'];
 const SUBKEYED = new Set(['students','grades','sheets','reportStatus']);
 let audit = [];
 let snap = null;
